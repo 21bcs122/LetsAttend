@@ -1,10 +1,14 @@
 @import "tailwindcss";
 
+/* next-themes sets class="dark" on <html>; Tailwind v4 defaults dark: to prefers-color-scheme only */
+@custom-variant dark (&:where(.dark, .dark *));
+
 :root {
-  --background: #fafafa;
+  --background: #f4f4f5;
   --foreground: #0a0a0a;
-  --card: rgba(255, 255, 255, 0.72);
-  --border: rgba(0, 0, 0, 0.08);
+  /* Match dark-mode clarity: crisp surface + visible edge (dark uses ~10% white on #0a0a0a) */
+  --card: rgba(255, 255, 255, 0.88);
+  --border: rgba(0, 0, 0, 0.12);
 }
 
 .dark {

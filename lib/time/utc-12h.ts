@@ -1,4 +1,4 @@
-/** Convert 24h "HH:mm" (UTC) to 12h parts for display. */
+/** Convert 24h "HH:mm" (wall time) to 12h parts for display. */
 export function from24hUtc(s: string): { h12: number; m: number; ap: "AM" | "PM" } {
   const [a, b] = s.split(":").map((x) => parseInt(x, 10));
   const h24 = Number.isFinite(a) ? a : 0;
@@ -9,7 +9,7 @@ export function from24hUtc(s: string): { h12: number; m: number; ap: "AM" | "PM"
   return { h12, m, ap };
 }
 
-/** Build 24h "HH:mm" (UTC) from 12h clock. */
+/** Build 24h "HH:mm" (wall time) from 12h clock. */
 export function to24hUtc(h12: number, m: number, ap: "AM" | "PM"): string {
   const h24 =
     ap === "AM" ? (h12 === 12 ? 0 : h12) : h12 === 12 ? 12 : h12 + 12;

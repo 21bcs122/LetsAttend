@@ -3,6 +3,7 @@ import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { ThemeProvider } from "@/components/client/theme-provider";
 import { PwaInstallPrompt } from "@/components/client/pwa-install-prompt";
+import { AppToaster } from "@/components/client/app-toaster";
 import { APP_NAME } from "@/lib/constants";
 
 const geistSans = Geist({
@@ -26,11 +27,12 @@ export const metadata: Metadata = {
   },
   description: APP_DESCRIPTION,
   icons: {
+    /** `app/icon.png` (MTES logo) is the default favicon. */
     icon: [
       { url: "/icons/icon-192.png", sizes: "192x192", type: "image/png" },
       { url: "/icons/icon-512.png", sizes: "512x512", type: "image/png" },
     ],
-    apple: "/icons/icon-192.png",
+    apple: [{ url: "/apple-icon.png", sizes: "180x180", type: "image/png" }],
   },
   appleWebApp: {
     capable: true,
@@ -75,6 +77,7 @@ export default function RootLayout({
           disableTransitionOnChange
         >
           {children}
+          <AppToaster />
           <PwaInstallPrompt />
         </ThemeProvider>
       </body>

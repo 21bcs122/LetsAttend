@@ -1,7 +1,20 @@
 import { FieldValue } from "firebase-admin/firestore";
 import { adminDb } from "@/lib/firebase/admin";
-import { attendanceDayKeyUTC } from "@/lib/date/today-key";
-import { previousUtcDayKey, utcMillisForDayAndHm } from "@/lib/site/utc-day-time";
+import {
+  calendarDateKeyInTimeZone,
+  recentAttendanceDayKeysForQuery,
+} from "@/lib/date/calendar-day-key";
+import { zonedWallClockToUtcMillis } from "@/lib/site/zoned-schedule";
+import { scheduleTimeZoneFromSiteData, timeZoneFromUserSnapshot } from "@/lib/attendance/time-zone-from-snap";
+
+const DAY_RE = /^\d{4}-\d{2}-\d{2}$/;
+
+function dayKeyFromAttendanceDocId(docId: string): string | null {
+  const idx = docId.lastIndexOf("_");
+  if (idx <= 0) return null;
+  const tail = docId.slice(idx + 1);
+  return DAY_RE.test(tail) ? tail : null;
+}
 
 function placeholderPhotoUrl(): string {
   return (
@@ -10,14 +23,21 @@ function placeholderPhotoUrl(): string {
   );
 }
 
+/**
+ * Cron: close open rows when “now” is past that attendance day’s configured local auto check-out time
+ * (wall clock in the site’s {@link scheduleTimeZoneFromSiteData}, default Nepal).
+ */
 export async function runAutoCheckout(): Promise<{ processed: number; errors: string[] }> {
   const db = adminDb();
-  const today = attendanceDayKeyUTC();
-  const yesterday = previousUtcDayKey(today);
+  const now = new Date();
+  const dayKeys = recentAttendanceDayKeysForQuery(now, 10);
   const errors: string[] = [];
   let processed = 0;
 
-  const snap = await db.collection("attendance").where("date", "in", [today, yesterday]).get();
+  const snap = await db.collection("attendance").where("date", "in", dayKeys).get();
+  const nowMs = Date.now();
+
+  const workerTzCache = new Map<string, string>();
 
   for (const doc of snap.docs) {
     const data = doc.data() as {
@@ -25,14 +45,36 @@ export async function runAutoCheckout(): Promise<{ processed: number; errors: st
       checkOut?: unknown;
       siteId?: string;
       date?: string;
+      workerId?: string;
     };
     if (!data.checkIn || data.checkOut) continue;
 
-    const dayKey = typeof data.date === "string" ? data.date : "";
+    const dayKey =
+      dayKeyFromAttendanceDocId(doc.id) ??
+      (typeof data.date === "string" && DAY_RE.test(data.date) ? data.date : null);
     if (!dayKey) continue;
 
+    const workerId = typeof data.workerId === "string" ? data.workerId : "";
+    if (workerId) {
+      const prefix = `${workerId}_`;
+      if (!doc.id.startsWith(prefix)) {
+        errors.push(`${doc.id}: skip (workerId does not match document id)`);
+        continue;
+      }
+    }
+
     const siteId = typeof data.siteId === "string" ? data.siteId : "";
-    if (!siteId) continue;
+    if (!siteId || !workerId) continue;
+
+    let workerTz = workerTzCache.get(workerId);
+    if (!workerTz) {
+      const uSnap = await db.collection("users").doc(workerId).get();
+      workerTz = timeZoneFromUserSnapshot(uSnap);
+      workerTzCache.set(workerId, workerTz);
+    }
+
+    const todayKeyWorker = calendarDateKeyInTimeZone(now, workerTz);
+    if (dayKey > todayKeyWorker) continue;
 
     try {
       const siteSnap = await db.collection("sites").doc(siteId).get();
@@ -43,14 +85,11 @@ export async function runAutoCheckout(): Promise<{ processed: number; errors: st
           ? site.autoCheckoutUtc.trim()
           : "23:59";
 
-      const deadline = utcMillisForDayAndHm(dayKey, hhmm);
+      const siteTz = scheduleTimeZoneFromSiteData(site);
+      const deadline = zonedWallClockToUtcMillis(dayKey, hhmm, siteTz);
       if (deadline == null) continue;
 
-      const now = Date.now();
-      const shouldClose =
-        dayKey < today || (dayKey === today && now >= deadline);
-
-      if (!shouldClose) continue;
+      if (nowMs < deadline) continue;
 
       const lat = Number(site.latitude);
       const lng = Number(site.longitude);

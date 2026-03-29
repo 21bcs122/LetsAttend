@@ -20,6 +20,7 @@ async function assertAdminRole(decoded: { uid: string; email?: string | null }) 
 
 type LiveWorkerRow = {
   workerId: string;
+  workerName: string | null;
   latitude: number;
   longitude: number;
   accuracyM: number | undefined;
@@ -52,6 +53,7 @@ async function filterOutSuperAdminWorkers(
 const outSchema = z.array(
   z.object({
     workerId: z.string(),
+    workerName: z.string().nullable().optional(),
     latitude: z.number().finite(),
     longitude: z.number().finite(),
     accuracyM: z.number().finite().optional(),
@@ -92,7 +94,7 @@ export async function GET(req: Request) {
 
   const snap = await db.collection("live_tracking").get();
 
-  let workers = snap.docs.map((d) => {
+  const rawWorkers = snap.docs.map((d) => {
     type LocationLike = {
       latitude?: number;
       longitude?: number;
@@ -115,6 +117,7 @@ export async function GET(req: Request) {
 
     return {
       workerId: d.id,
+      workerName: null as string | null,
       latitude: Number(location.latitude),
       longitude: Number(location.longitude),
       accuracyM:
@@ -122,6 +125,28 @@ export async function GET(req: Request) {
       lastUpdatedMs: lastUpdatedMs ?? null,
     } satisfies LiveWorkerRow;
   });
+
+  const ids = [...new Set(rawWorkers.map((w) => w.workerId))];
+  const nameById = new Map<string, string | null>();
+  for (let i = 0; i < ids.length; i += 20) {
+    const chunk = ids.slice(i, i + 20);
+    const refs = chunk.map((id) => db.collection("users").doc(id));
+    const snaps = await db.getAll(...refs);
+    snaps.forEach((s, j) => {
+      const id = chunk[j]!;
+      if (!s.exists) {
+        nameById.set(id, null);
+        return;
+      }
+      const n = s.data()?.name;
+      nameById.set(id, typeof n === "string" && n.trim() ? n.trim() : null);
+    });
+  }
+
+  let workers = rawWorkers.map((w) => ({
+    ...w,
+    workerName: nameById.get(w.workerId) ?? null,
+  }));
 
   if (siteFilter) {
     const { latitude: clat, longitude: clng, radius } = siteFilter;

@@ -33,10 +33,17 @@ export type AttendanceCheck = {
   photoUrl: string;
 };
 
+/** Stored in Firestore on each site switch; includes segment check-out from `fromSiteId`. */
 export type SiteSwitchLog = {
   fromSiteId: string | null;
   toSiteId: string;
   at: FsTime;
+  previousSiteCheckOut?: {
+    siteId: string;
+    time: FsTime;
+    gps: GpsPoint;
+    photoUrl: string;
+  };
 };
 
 export type AttendanceStatus = "present" | "half_day" | "absent";

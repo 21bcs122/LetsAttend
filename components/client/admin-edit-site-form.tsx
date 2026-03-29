@@ -149,7 +149,7 @@ export function AdminEditSiteForm({
   return (
     <div className="space-y-4">
       <p className="text-sm text-zinc-500">
-        Change geofence radius, pin location, name, or UTC work times. Saving updates live checks and maps
+        Change geofence radius, pin location, name, or NPT work times. Saving updates live checks and maps
         immediately.
       </p>
 
@@ -257,21 +257,21 @@ export function AdminEditSiteForm({
         <div className="grid gap-4 sm:grid-cols-2">
           <UtcTimePicker
             id={`edit-work-start-${site.id}`}
-            label="Expected work start (UTC)"
+            label="Expected work start (NPT)"
             value={workdayStartUtc}
             onChange={setWorkdayStartUtc}
             allowEmpty
           />
           <UtcTimePicker
             id={`edit-auto-checkout-${site.id}`}
-            label="Auto check-out after (UTC)"
+            label="Auto check-out after (NPT)"
             value={autoCheckoutUtc}
             onChange={setAutoCheckoutUtc}
           />
         </div>
         <p className="text-xs text-zinc-500">
-          Use “No time” on work start to hide it on the Today page. All values are stored as UTC
-          (24h).
+          Use “No time” on work start to hide it on the Today page. Pick times in 12-hour AM/PM (Nepal NPT
+          wall time).
         </p>
         <Button type="submit" disabled={busy}>
           {busy ? "Saving…" : "Save changes"}

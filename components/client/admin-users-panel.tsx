@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import { useSearchParams } from "next/navigation";
 import { AttendanceCalendar } from "@/components/client/attendance-calendar";
 import { Button } from "@/components/ui/button";
 import {
@@ -10,7 +11,9 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { AssignWorkSitesModal } from "@/components/client/assign-work-sites-modal";
 import { getFirebaseAuth } from "@/lib/firebase/client";
+import { TableRowsSkeleton } from "@/components/client/dashboard-skeletons";
 import { useDashboardUser } from "@/components/client/dashboard-user-context";
 
 type Row = {
@@ -18,9 +21,11 @@ type Row = {
   name: string;
   email: string;
   role: string;
+  assignedSites?: string[];
 };
 
 export function AdminUsersPanel() {
+  const searchParams = useSearchParams();
   const { user: viewer } = useDashboardUser();
   const [users, setUsers] = React.useState<Row[]>([]);
   const [loading, setLoading] = React.useState(true);
@@ -30,6 +35,7 @@ export function AdminUsersPanel() {
   const [resetLink, setResetLink] = React.useState<string | null>(null);
   const [resetBusy, setResetBusy] = React.useState(false);
   const [resetMsg, setResetMsg] = React.useState<string | null>(null);
+  const [assignWorker, setAssignWorker] = React.useState<Row | null>(null);
 
   const load = React.useCallback(async () => {
     setLoading(true);
@@ -59,6 +65,12 @@ export function AdminUsersPanel() {
   React.useEffect(() => {
     void load();
   }, [load]);
+
+  React.useEffect(() => {
+    const w = searchParams.get("worker")?.trim();
+    if (!w || users.length === 0) return;
+    if (users.some((u) => u.id === w)) setSelectedId(w);
+  }, [searchParams, users]);
 
   const requestResetLink = async () => {
     setResetMsg(null);
@@ -129,6 +141,15 @@ export function AdminUsersPanel() {
 
   return (
     <div className="space-y-6">
+      <AssignWorkSitesModal
+        worker={assignWorker}
+        open={assignWorker != null}
+        onOpenChange={(open) => {
+          if (!open) setAssignWorker(null);
+        }}
+        onSaved={() => void load()}
+      />
+
       <Card>
         <CardHeader>
           <CardTitle>Users</CardTitle>
@@ -140,19 +161,20 @@ export function AdminUsersPanel() {
         </CardHeader>
         <CardContent className="space-y-4">
           {loading ? (
-            <p className="text-sm text-zinc-400">Loading…</p>
+            <TableRowsSkeleton rows={6} />
           ) : err ? (
             <p className="text-sm text-red-400">{err}</p>
           ) : (
             <div className="overflow-x-auto rounded-xl border border-white/10">
-              <table className="w-full min-w-[520px] text-left text-sm">
+              <table className="w-full min-w-[640px] text-left text-sm">
                 <thead className="border-b border-white/10 bg-white/[0.03] text-xs uppercase text-zinc-500">
                   <tr>
                     <th className="px-3 py-2">Name</th>
                     <th className="px-3 py-2">Email</th>
                     <th className="px-3 py-2">Role</th>
                     {canManageAdmins ? <th className="px-3 py-2">Admin</th> : null}
-                    <th className="px-3 py-2">Calendar</th>
+                    <th className="px-3 py-2 text-right">Assign</th>
+                    <th className="px-3 py-2">View</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -181,6 +203,21 @@ export function AdminUsersPanel() {
                           )}
                         </td>
                       ) : null}
+                      <td className="px-3 py-2 text-right">
+                        {r.role === "employee" ? (
+                          <Button
+                            type="button"
+                            variant="secondary"
+                            size="sm"
+                            className="h-8 text-xs"
+                            onClick={() => setAssignWorker(r)}
+                          >
+                            Assign
+                          </Button>
+                        ) : (
+                          <span className="text-zinc-600">—</span>
+                        )}
+                      </td>
                       <td className="px-3 py-2">
                         <Button
                           type="button"
@@ -240,7 +277,7 @@ export function AdminUsersPanel() {
         <AttendanceCalendar
           workerId={selected.id}
           title={`Attendance — ${selected.name}`}
-          description={`Worker ID ${selected.id}. UTC month (same as employee view).`}
+          description={`Worker ID ${selected.id}. Tap any day for the full timeline in work time (NPT): check-in, switches, check-out.`}
         />
       ) : null}
     </div>

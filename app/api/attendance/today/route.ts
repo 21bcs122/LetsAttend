@@ -2,7 +2,8 @@ import { NextResponse } from "next/server";
 import { adminDb } from "@/lib/firebase/admin";
 import { requireBearerUser } from "@/lib/auth/verify-request";
 import { jsonError } from "@/lib/api/json-error";
-import { attendanceDayKeyUTC } from "@/lib/date/today-key";
+import { calendarDateKeyInTimeZone } from "@/lib/date/calendar-day-key";
+import { timeZoneFromUserSnapshot } from "@/lib/attendance/time-zone-from-snap";
 
 export const runtime = "nodejs";
 
@@ -23,12 +24,14 @@ export async function GET(req: Request) {
   if (!auth.ok) return auth.response;
   const decoded = auth.decoded;
 
-  const day = new URL(req.url).searchParams.get("day")?.trim() || attendanceDayKeyUTC();
+  const db = adminDb();
+  const userSnap = await db.collection("users").doc(decoded.uid).get();
+  const tz = timeZoneFromUserSnapshot(userSnap);
+  const defaultDay = calendarDateKeyInTimeZone(new Date(), tz);
+  const day = new URL(req.url).searchParams.get("day")?.trim() || defaultDay;
   if (!/^\d{4}-\d{2}-\d{2}$/.test(day)) {
     return jsonError("Invalid day", 400);
   }
-
-  const db = adminDb();
   const attRef = db.collection("attendance").doc(`${decoded.uid}_${day}`);
   const attSnap = await attRef.get();
   if (!attSnap.exists) {
@@ -105,6 +108,25 @@ export async function GET(req: Request) {
     }
     const fromId = typeof o.fromSiteId === "string" ? o.fromSiteId : "";
     const toId = typeof o.toSiteId === "string" ? o.toSiteId : "";
+    const psco = o.previousSiteCheckOut as
+      | { siteId?: string; time?: unknown; photoUrl?: unknown; gps?: unknown }
+      | undefined;
+    const previousSiteCheckOut =
+      psco && typeof psco === "object"
+        ? {
+            siteId: typeof psco.siteId === "string" ? psco.siteId : fromId,
+            siteName:
+              typeof psco.siteId === "string"
+                ? siteNamesById[psco.siteId] ?? fromId
+                : fromId
+                  ? siteNamesById[fromId] ?? fromId
+                  : null,
+            atMs: tsMs(psco.time),
+            photoUrl: typeof psco.photoUrl === "string" ? psco.photoUrl : null,
+            gps: psco.gps ?? null,
+          }
+        : null;
+
     return {
       fromSiteId: fromId,
       toSiteId: toId,
@@ -113,6 +135,7 @@ export async function GET(req: Request) {
       photoUrl: o.photoUrl,
       gps: o.gps,
       atMs,
+      previousSiteCheckOut,
     };
   });
 

@@ -4,7 +4,9 @@ import { FieldValue, adminDb } from "@/lib/firebase/admin";
 import { requireBearerUser } from "@/lib/auth/verify-request";
 import { jsonError } from "@/lib/api/json-error";
 import { isWithinSiteRadius } from "@/lib/geo/validate-site";
-import { attendanceDayKeyUTC } from "@/lib/date/today-key";
+import { calendarDateKeyInTimeZone } from "@/lib/date/calendar-day-key";
+import { timeZoneFromUserSnapshot } from "@/lib/attendance/time-zone-from-snap";
+import { canRecordAttendanceFor } from "@/lib/attendance/proxy-attendance";
 
 export const runtime = "nodejs";
 
@@ -14,6 +16,7 @@ const bodySchema = z.object({
   longitude: z.number().finite(),
   accuracyM: z.number().finite().optional(),
   photoUrl: z.string().url(),
+  forWorkerId: z.string().min(1).optional(),
 });
 
 export async function POST(req: Request) {
@@ -32,9 +35,15 @@ export async function POST(req: Request) {
   if (!parsed.success) {
     return jsonError(parsed.error.issues[0]?.message ?? "Invalid body", 400);
   }
-  const { siteId, latitude, longitude, accuracyM, photoUrl } = parsed.data;
+  const { siteId, latitude, longitude, accuracyM, photoUrl, forWorkerId } = parsed.data;
 
   const db = adminDb();
+  const callerRef = db.collection("users").doc(decoded.uid);
+  const callerSnap = await callerRef.get();
+  if (!callerSnap.exists) {
+    return jsonError("Your workspace profile was not found.", 403);
+  }
+
   const siteRef = db.collection("sites").doc(siteId);
   const siteSnap = await siteRef.get();
   if (!siteSnap.exists) return jsonError("Site not found", 404);
@@ -63,8 +72,25 @@ export async function POST(req: Request) {
     );
   }
 
-  const day = attendanceDayKeyUTC();
-  const attRef = db.collection("attendance").doc(`${decoded.uid}_${day}`);
+  let workerUid = decoded.uid;
+  let workerSnap = callerSnap;
+  let recordedByUid: string | undefined;
+
+  if (forWorkerId && forWorkerId !== decoded.uid) {
+    const subjectRef = db.collection("users").doc(forWorkerId);
+    const subjectSnap = await subjectRef.get();
+    if (!subjectSnap.exists) return jsonError("Worker not found", 404);
+    if (!canRecordAttendanceFor(callerSnap, subjectSnap)) {
+      return jsonError("Not allowed to record attendance for this worker", 403);
+    }
+    workerUid = forWorkerId;
+    workerSnap = subjectSnap;
+    recordedByUid = decoded.uid;
+  }
+
+  const tz = timeZoneFromUserSnapshot(workerSnap);
+  const day = calendarDateKeyInTimeZone(new Date(), tz);
+  const attRef = db.collection("attendance").doc(`${workerUid}_${day}`);
   const attSnap = await attRef.get();
   const data = attSnap.data() as { checkIn?: unknown; checkOut?: unknown; siteId?: string } | undefined;
 
@@ -75,17 +101,22 @@ export async function POST(req: Request) {
   }
 
   const now = FieldValue.serverTimestamp();
+  const checkOutPayload: Record<string, unknown> = {
+    time: now,
+    gps: {
+      latitude,
+      longitude,
+      ...(accuracyM != null ? { accuracyM } : {}),
+    },
+    photoUrl,
+  };
+  if (recordedByUid) {
+    checkOutPayload.recordedByUid = recordedByUid;
+  }
+
   await attRef.set(
     {
-      checkOut: {
-        time: now,
-        gps: {
-          latitude,
-          longitude,
-          ...(accuracyM != null ? { accuracyM } : {}),
-        },
-        photoUrl,
-      },
+      checkOut: checkOutPayload,
       updatedAt: now,
     },
     { merge: true }

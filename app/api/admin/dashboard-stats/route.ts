@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { adminDb } from "@/lib/firebase/admin";
-import { attendanceDayKeyUTC } from "@/lib/date/today-key";
+import { DateTime } from "luxon";
+import { calendarDateKeyInTimeZone } from "@/lib/date/calendar-day-key";
+import { DEFAULT_ATTENDANCE_TIME_ZONE } from "@/lib/date/time-zone";
 import { jsonError } from "@/lib/api/json-error";
 import { isRequestAdmin } from "@/lib/auth/require-admin";
 import { requireBearerUser } from "@/lib/auth/verify-request";
@@ -19,7 +21,7 @@ export async function GET(req: Request) {
   if (!(await isRequestAdmin(decoded))) return jsonError("Forbidden", 403);
 
   const db = adminDb();
-  const day = attendanceDayKeyUTC();
+  const day = calendarDateKeyInTimeZone(new Date(), DEFAULT_ATTENDANCE_TIME_ZONE);
   const now = new Date().getTime();
 
   const [attendanceSnap, liveSnap] = await Promise.all([
@@ -35,7 +37,6 @@ export async function GET(req: Request) {
     (d) => d.checkIn != null && d.checkOut == null
   ).length;
 
-  const lateThresholdUTC = { h: 9, m: 0 };
   const lateArrivals = attendanceDocs.filter((d) => {
     const t = d.checkIn?.time;
     if (!t) return false;
@@ -46,12 +47,8 @@ export async function GET(req: Request) {
           ? t.seconds * 1000
           : null;
     if (ms == null) return false;
-    const dt = new Date(ms);
-    return (
-      dt.getUTCHours() > lateThresholdUTC.h ||
-      (dt.getUTCHours() === lateThresholdUTC.h &&
-        dt.getUTCMinutes() >= lateThresholdUTC.m)
-    );
+    const local = DateTime.fromMillis(ms, { zone: "utc" }).setZone(DEFAULT_ATTENDANCE_TIME_ZONE);
+    return local.hour > 9 || (local.hour === 9 && local.minute >= 0);
   }).length;
 
   const activeWithinMs = 2 * 60 * 1000;

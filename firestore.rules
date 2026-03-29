@@ -65,6 +65,7 @@ service cloud.firestore {
         && request.auth.uid == userId
         && request.resource.data.role == resource.data.role
         && request.resource.data.assignedSites == resource.data.assignedSites
+        && request.resource.data.timeZone == resource.data.timeZone
         && request.resource.data.email == tokenEmail();
 
       /**

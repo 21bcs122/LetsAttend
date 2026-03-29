@@ -11,14 +11,35 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { CameraCapture } from "@/components/client/camera-capture";
-import { GpsReadout, type GpsResult } from "@/components/client/gps-readout";
+import { CameraCapture, type CameraCaptureHandle } from "@/components/client/camera-capture";
+import { useDashboardUser } from "@/components/client/dashboard-user-context";
+import { OutOfSiteRadiusAlert } from "@/components/client/out-of-site-radius-alert";
+import { ResultModal } from "@/components/client/feedback-modals";
+import { SiteSelectWithCustomRow } from "@/components/client/site-select-with-custom-row";
+import { toast } from "sonner";
+import { getGpsFix, type GpsResult } from "@/lib/client/geolocation";
 import { getFirebaseAuth, getFirebaseDb } from "@/lib/firebase/client";
-import { attendanceDayKeyUTC } from "@/lib/date/today-key";
+import { calendarDateKeyInTimeZone } from "@/lib/date/calendar-day-key";
+import { normalizeTimeZoneId } from "@/lib/date/time-zone";
+import { cn } from "@/lib/utils";
 
 type Site = { id: string; name?: string };
 
-export function EmployeeSiteSwitchPanel() {
+type FlowStep = 0 | 1 | 2;
+type RadiusErr = { distanceM: number; radiusM: number };
+
+export function EmployeeSiteSwitchPanel({
+  proxyForUid,
+  subjectTimeZone,
+}: {
+  proxyForUid?: string;
+  /** Required when `proxyForUid` is set — worker’s IANA zone for the attendance day key. */
+  subjectTimeZone?: string;
+} = {}) {
+  const { user } = useDashboardUser();
+  const isAdminLike =
+    user?.role === "admin" || user?.role === "super_admin";
+  const [expanded, setExpanded] = React.useState(false);
   const [sites, setSites] = React.useState<Site[]>([]);
   const [siteNames, setSiteNames] = React.useState<Record<string, string>>({});
   const [currentSiteId, setCurrentSiteId] = React.useState<string | null>(null);
@@ -26,8 +47,26 @@ export function EmployeeSiteSwitchPanel() {
   const [siteId, setSiteId] = React.useState("");
   const [gps, setGps] = React.useState<GpsResult | null>(null);
   const [selfie, setSelfie] = React.useState<string | null>(null);
-  const [msg, setMsg] = React.useState<string | null>(null);
+  const [step, setStep] = React.useState<FlowStep>(0);
+  const [streamReady, setStreamReady] = React.useState(false);
+  const [switchSuccess, setSwitchSuccess] = React.useState<{
+    distanceM: string;
+  } | null>(null);
+  const [radiusError, setRadiusError] = React.useState<RadiusErr | null>(null);
   const [busy, setBusy] = React.useState(false);
+  const camRef = React.useRef<CameraCaptureHandle>(null);
+
+  React.useEffect(() => {
+    const syncHash = () => {
+      if (typeof window === "undefined") return;
+      if (window.location.hash === "#employee-site-switch") {
+        setExpanded(true);
+      }
+    };
+    syncHash();
+    window.addEventListener("hashchange", syncHash);
+    return () => window.removeEventListener("hashchange", syncHash);
+  }, []);
 
   const authHeaders = React.useCallback(async () => {
     const auth = getFirebaseAuth();
@@ -37,23 +76,25 @@ export function EmployeeSiteSwitchPanel() {
     return { Authorization: `Bearer ${token}` };
   }, []);
 
+  const loadSites = React.useCallback(async () => {
+    const h = await authHeaders();
+    const res = await fetch("/api/sites", { headers: h });
+    const data = (await res.json()) as { sites?: Site[]; error?: string };
+    if (!res.ok) throw new Error(data.error ?? "Failed to load sites");
+    const list = data.sites ?? [];
+    setSites(list);
+    const names: Record<string, string> = {};
+    for (const s of list) {
+      names[s.id] = s.name ?? s.id;
+    }
+    setSiteNames(names);
+  }, [authHeaders]);
+
   React.useEffect(() => {
     let cancelled = false;
     const run = async () => {
       try {
-        const h = await authHeaders();
-        const res = await fetch("/api/sites", { headers: h });
-        const data = (await res.json()) as { sites?: Site[]; error?: string };
-        if (!res.ok) throw new Error(data.error ?? "Failed to load sites");
-        if (!cancelled) {
-          const list = data.sites ?? [];
-          setSites(list);
-          const names: Record<string, string> = {};
-          for (const s of list) {
-            names[s.id] = s.name ?? s.id;
-          }
-          setSiteNames(names);
-        }
+        if (!cancelled) await loadSites();
       } catch {
         /* ignore */
       }
@@ -66,7 +107,7 @@ export function EmployeeSiteSwitchPanel() {
       cancelled = true;
       unsub();
     };
-  }, [authHeaders]);
+  }, [loadSites]);
 
   React.useEffect(() => {
     const auth = getFirebaseAuth();
@@ -79,8 +120,12 @@ export function EmployeeSiteSwitchPanel() {
       setSessionOpen(false);
       setCurrentSiteId(null);
       if (!u) return;
-      const day = attendanceDayKeyUTC();
-      const ref = doc(db, "attendance", `${u.uid}_${day}`);
+      const workerId = proxyForUid ?? u.uid;
+      const tz = proxyForUid
+        ? normalizeTimeZoneId(subjectTimeZone)
+        : normalizeTimeZoneId(user?.timeZone);
+      const day = calendarDateKeyInTimeZone(new Date(), tz);
+      const ref = doc(db, "attendance", `${workerId}_${day}`);
       unsubDoc = onSnapshot(
         ref,
         (snap) => {
@@ -106,7 +151,27 @@ export function EmployeeSiteSwitchPanel() {
       unsubAuth();
       unsubDoc?.();
     };
+  }, [user?.timeZone, proxyForUid, subjectTimeZone]);
+
+  React.useEffect(() => {
+    if (step === 0) setStreamReady(false);
+  }, [step]);
+
+  const resetCaptureFlow = React.useCallback(() => {
+    camRef.current?.stop();
+    setSelfie(null);
+    setStep(0);
+    setGps(null);
+    setStreamReady(false);
   }, []);
+
+  React.useEffect(() => {
+    if (!sessionOpen) {
+      resetCaptureFlow();
+      setSiteId("");
+      setRadiusError(null);
+    }
+  }, [sessionOpen, resetCaptureFlow]);
 
   const uploadSelfie = async (dataUrl: string) => {
     const h = await authHeaders();
@@ -124,20 +189,8 @@ export function EmployeeSiteSwitchPanel() {
     return data.url!;
   };
 
-  const switchSite = async () => {
-    setMsg(null);
-    if (!siteId) {
-      setMsg("Select a site to switch to.");
-      return;
-    }
-    if (!gps) {
-      setMsg("Capture GPS first.");
-      return;
-    }
-    if (!selfie) {
-      setMsg("Take a new selfie to confirm you are at the new site.");
-      return;
-    }
+  const submitSwitch = async () => {
+    if (!siteId || !gps || !selfie) return;
     setBusy(true);
     try {
       const photoUrl = await uploadSelfie(selfie);
@@ -151,15 +204,26 @@ export function EmployeeSiteSwitchPanel() {
           longitude: gps.longitude,
           accuracyM: gps.accuracyM,
           photoUrl,
+          ...(proxyForUid ? { forWorkerId: proxyForUid } : {}),
         }),
       });
       const data = (await res.json()) as {
         ok?: boolean;
         error?: string;
         distanceM?: number;
+        radiusM?: number;
       };
       if (!res.ok) {
-        setMsg(
+        if (
+          res.status === 403 &&
+          data.error === "Outside site radius" &&
+          typeof data.distanceM === "number" &&
+          typeof data.radiusM === "number"
+        ) {
+          setRadiusError({ distanceM: data.distanceM, radiusM: data.radiusM });
+          return;
+        }
+        toast.error(
           data.error ??
             (typeof data.distanceM === "number"
               ? `Too far from site (~${data.distanceM}m).`
@@ -169,115 +233,240 @@ export function EmployeeSiteSwitchPanel() {
       }
       const dm =
         typeof data.distanceM === "number" && Number.isFinite(data.distanceM)
-          ? data.distanceM
+          ? String(Math.round(data.distanceM))
           : "?";
-      setMsg(`Switched site. ~${dm}m from new site center.`);
-      setSelfie(null);
-      setGps(null);
+      setSwitchSuccess({ distanceM: dm });
+      setRadiusError(null);
+      resetCaptureFlow();
+      setSiteId("");
     } catch (e) {
-      setMsg(e instanceof Error ? e.message : "Switch failed");
+      toast.error(e instanceof Error ? e.message : "Switch failed");
     } finally {
       setBusy(false);
     }
   };
 
-  if (!sessionOpen) {
-    return null;
-  }
+  const onPrimaryClick = async () => {
+    setRadiusError(null);
+    if (!siteId) {
+      toast.message("Select the site you are moving to.");
+      return;
+    }
+
+    if (step === 0) {
+      setBusy(true);
+      try {
+        setStreamReady(false);
+        const g = await getGpsFix();
+        setGps(g);
+        await camRef.current?.start();
+        setStep(1);
+      } catch (e) {
+        toast.error(e instanceof Error ? e.message : "Could not start");
+        setGps(null);
+      } finally {
+        setBusy(false);
+      }
+      return;
+    }
+
+    if (step === 1) {
+      if (!streamReady) return;
+      setBusy(true);
+      try {
+        await camRef.current?.capture();
+      } finally {
+        setBusy(false);
+      }
+      return;
+    }
+
+    if (step === 2) {
+      await submitSwitch();
+    }
+  };
+
+  const primaryDisabled =
+    busy ||
+    (step === 1 && !streamReady) ||
+    (step === 2 && (!gps || !selfie));
+
+  const primaryHint =
+    step === 0
+      ? "Tap once to capture location and open the camera (at your new site)."
+      : step === 1
+        ? "Tap again to take your selfie."
+        : "Tap again to confirm switch — records check-out from your current site, not end-of-day.";
 
   const otherSites = sites.filter((s) => s.id !== currentSiteId);
 
-  if (otherSites.length === 0) {
-    return (
-      <Card className="border-white/10 bg-white/[0.02]">
-        <CardHeader>
-          <CardTitle className="text-base">Switch work site</CardTitle>
-          <CardDescription>
-            You only have one site available while checked in. Ask an admin to assign additional
-            sites if you need to work at more than one location in a day.
-          </CardDescription>
-        </CardHeader>
-      </Card>
-    );
-  }
-
-  const canSubmit = Boolean(siteId && gps && selfie && !busy);
-
-  return (
+  const expandedBody = !sessionOpen ? (
+    <Card className="bg-zinc-50/90 dark:bg-white/[0.02]">
+      <CardHeader>
+        <CardTitle className="text-base">Switch work site</CardTitle>
+        <CardDescription>
+          After you <strong className="text-zinc-300">check in</strong>, this section becomes active.
+          Switching records a <strong className="text-zinc-300">check-out from the site you are leaving</strong>{" "}
+          (same GPS + selfie at the <strong className="text-zinc-300">new</strong> site) and keeps your day
+          open. Your <strong className="text-zinc-300">final check-out</strong> is only when you use{" "}
+          <strong className="text-zinc-300">Check out</strong> — not here.
+        </CardDescription>
+      </CardHeader>
+    </Card>
+  ) : otherSites.length === 0 ? (
+    <Card className="bg-zinc-50/90 dark:bg-white/[0.02]">
+      <CardHeader>
+        <CardTitle className="text-base">Switch work site</CardTitle>
+        <CardDescription>
+          There is only one work site in your workspace besides where you are now, so there is nowhere to
+          switch to. An admin can add another site if your org works from multiple locations.
+        </CardDescription>
+      </CardHeader>
+    </Card>
+  ) : (
     <Card className="border-cyan-500/25 bg-gradient-to-br from-cyan-500/[0.07] to-transparent">
       <CardHeader>
         <CardTitle>Switch work site</CardTitle>
         <CardDescription>
-          You are checked in
-          {currentSiteId
-            ? ` at “${siteNames[currentSiteId] ?? currentSiteId}”. Move to another assigned site
-              the same day: choose the destination, capture GPS at that site, take a fresh selfie, then
-              confirm.`
-            : "."}
+          {currentSiteId ? (
+            <>
+              You are checked in at &ldquo;{siteNames[currentSiteId] ?? currentSiteId}&rdquo;. You must stay
+              at least <strong className="text-zinc-200">1 hour</strong> on the current site before switching
+              elsewhere (rule enforced on submit). Same flow as check-in: pick the new site, then GPS +
+              selfie at that site. Records segment check-out from the current site only — your day stays open
+              until <strong className="text-zinc-300">Check out</strong>. You can pick <strong className="text-zinc-300">any work site</strong>{" "}
+              (not limited to admin assignments — those apply to <strong className="text-zinc-300">Check in</strong>
+              only). The bell &ldquo;Go to Work&rdquo; link only nudges check-in.
+            </>
+          ) : (
+            "You are checked in."
+          )}
         </CardDescription>
       </CardHeader>
       <CardContent className="flex flex-col gap-4 md:gap-6">
-        <ol className="list-inside list-decimal space-y-1 text-sm text-zinc-400">
-          <li>
-            <span className="text-zinc-200">Pick the site</span> you are moving to (must be assigned to
-            you).
-          </li>
-          <li>
-            <span className="text-zinc-200">Capture GPS</span> while physically at the new site.
-          </li>
-          <li>
-            <span className="text-zinc-200">Take a new selfie</span> for verification.
-          </li>
-        </ol>
+        <SiteSelectWithCustomRow
+          label="New site"
+          sites={otherSites}
+          value={siteId}
+          onChange={setSiteId}
+          onRefreshSites={loadSites}
+          showCustomSiteButton
+        />
 
-        <label className="flex flex-col gap-2 text-sm">
-          <span className="text-zinc-400">1 — New site</span>
-          <select
-            className="rounded-xl border border-white/10 bg-black/40 px-3 py-2 text-foreground"
-            value={siteId}
-            onChange={(e) => setSiteId(e.target.value)}
-          >
-            <option value="">Select…</option>
-            {otherSites.map((s) => (
-              <option key={s.id} value={s.id}>
-                {s.name ?? s.id}
-              </option>
-            ))}
-          </select>
-        </label>
+        {isAdminLike && gps ? (
+          <p className="text-xs font-mono text-zinc-500">
+            Admin debug: {gps.latitude.toFixed(6)}, {gps.longitude.toFixed(6)}
+            {gps.accuracyM != null && ` (±${Math.round(gps.accuracyM)}m)`}
+          </p>
+        ) : null}
 
-        <div>
-          <p className="mb-2 text-sm text-zinc-400">2 — GPS at new site</p>
-          <GpsReadout onFix={setGps} onError={setMsg} />
+        <div className="space-y-2">
+          <p className="text-xs text-zinc-500">Camera</p>
+          {!selfie ? (
+            <CameraCapture
+              ref={camRef}
+              hideControls
+              onStreamReady={() => setStreamReady(true)}
+              onCapture={(url) => {
+                setSelfie(url);
+                setStep(2);
+              }}
+              onError={(err) => toast.error(err)}
+            />
+          ) : (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={selfie}
+              alt="Site switch preview"
+              className="aspect-video w-full max-w-md rounded-xl border border-white/10 bg-black object-contain"
+            />
+          )}
         </div>
 
-        <div>
-          <p className="mb-2 text-sm text-zinc-400">3 — Selfie</p>
-          <CameraCapture onCapture={setSelfie} onError={setMsg} />
-        </div>
-
-        {selfie ? (
-          <img
-            src={selfie}
-            alt="Preview"
-            className="max-h-48 rounded-xl border border-white/10 object-contain"
+        {radiusError ? (
+          <OutOfSiteRadiusAlert
+            distanceM={radiusError.distanceM}
+            radiusM={radiusError.radiusM}
+            context="site-switch"
+            onDismiss={() => setRadiusError(null)}
           />
         ) : null}
 
-        <Button
-          type="button"
-          disabled={!canSubmit}
-          onClick={() => void switchSite()}
-        >
-          {busy ? "Submitting…" : "Confirm site switch"}
-        </Button>
-
-        {msg ? (
-          <p className="text-sm text-zinc-300" role="status">
-            {msg}
-          </p>
+        {switchSuccess ? (
+          <ResultModal
+            open
+            variant="success"
+            title="Site switched"
+            description={
+              <>
+                <p>
+                  Segment check-out from your previous site was recorded. Proof was captured about{" "}
+                  <strong className="text-emerald-100">{switchSuccess.distanceM} m</strong> from the new
+                  site center. Your day stays open until you use Check out.
+                </p>
+              </>
+            }
+            onDismiss={() => setSwitchSuccess(null)}
+          />
         ) : null}
+
+        <div className="flex flex-col gap-2">
+          <Button
+            type="button"
+            disabled={primaryDisabled}
+            onClick={() => void onPrimaryClick()}
+          >
+            {busy
+              ? step === 0
+                ? "Starting…"
+                : step === 1
+                  ? "Capturing…"
+                  : "Submitting…"
+              : "Submit site switch"}
+          </Button>
+          <p className="text-xs text-zinc-500">{primaryHint}</p>
+        </div>
       </CardContent>
     </Card>
+  );
+
+  return (
+    <div id="employee-site-switch" className="scroll-mt-28">
+      <button
+        type="button"
+        aria-expanded={expanded}
+        aria-controls="employee-site-switch-panel"
+        onClick={() => setExpanded((e) => !e)}
+        className={cn(
+          "flex w-full items-center justify-between gap-3 rounded-xl border border-white/10 bg-white/[0.03] px-4 py-3 text-left transition-colors hover:border-cyan-500/30 hover:bg-white/[0.05] dark:bg-white/[0.03]",
+          expanded && "rounded-b-none border-b-transparent"
+        )}
+      >
+        <div className="min-w-0">
+          <span className="text-sm font-semibold tracking-wide text-zinc-200">Switch</span>
+          {sessionOpen && currentSiteId ? (
+            <p className="mt-0.5 truncate text-xs text-zinc-500">
+              At “{siteNames[currentSiteId] ?? currentSiteId}”
+            </p>
+          ) : (
+            <p className="mt-0.5 text-xs text-zinc-500">Move to another site (after check-in)</p>
+          )}
+        </div>
+        <span
+          className="flex size-9 shrink-0 items-center justify-center rounded-lg border border-white/15 bg-black/30 text-lg font-light leading-none text-zinc-200"
+          aria-hidden
+        >
+          {expanded ? "−" : "+"}
+        </span>
+      </button>
+      {expanded ? (
+        <div
+          id="employee-site-switch-panel"
+          className="rounded-b-xl border border-t-0 border-zinc-200/80 bg-zinc-50/90 px-3 pb-3 pt-1 dark:border-white/10 dark:bg-white/[0.02]"
+        >
+          <div className="pt-2">{expandedBody}</div>
+        </div>
+      ) : null}
+    </div>
   );
 }

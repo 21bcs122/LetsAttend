@@ -4,7 +4,9 @@ import { FieldValue, adminDb } from "@/lib/firebase/admin";
 import { requireBearerUser } from "@/lib/auth/verify-request";
 import { jsonError } from "@/lib/api/json-error";
 import { isWithinSiteRadius } from "@/lib/geo/validate-site";
-import { attendanceDayKeyUTC } from "@/lib/date/today-key";
+import { calendarDateKeyInTimeZone } from "@/lib/date/calendar-day-key";
+import { timeZoneFromUserSnapshot } from "@/lib/attendance/time-zone-from-snap";
+import { canRecordAttendanceFor } from "@/lib/attendance/proxy-attendance";
 
 export const runtime = "nodejs";
 
@@ -14,6 +16,8 @@ const bodySchema = z.object({
   longitude: z.number().finite(),
   accuracyM: z.number().finite().optional(),
   photoUrl: z.string().url(),
+  /** Record check-in for another worker (friend / shared phone). Server validates permission. */
+  forWorkerId: z.string().min(1).optional(),
 });
 
 export async function POST(req: Request) {
@@ -32,16 +36,20 @@ export async function POST(req: Request) {
   if (!parsed.success) {
     return jsonError(parsed.error.issues[0]?.message ?? "Invalid body", 400);
   }
-  const { siteId, latitude, longitude, accuracyM, photoUrl } = parsed.data;
+  const { siteId, latitude, longitude, accuracyM, photoUrl, forWorkerId } = parsed.data;
 
   const db = adminDb();
-  const userRef = db.collection("users").doc(decoded.uid);
+  const callerRef = db.collection("users").doc(decoded.uid);
   const siteRef = db.collection("sites").doc(siteId);
 
-  const [userSnap, siteSnap] = await Promise.all([
-    userRef.get(),
-    siteRef.get(),
-  ]);
+  const [callerSnap, siteSnap] = await Promise.all([callerRef.get(), siteRef.get()]);
+
+  if (!callerSnap.exists) {
+    return jsonError(
+      "Your workspace profile was not found. Sign out and sign in again, or contact an admin.",
+      403
+    );
+  }
 
   if (!siteSnap.exists) return jsonError("Site not found", 404);
 
@@ -69,16 +77,34 @@ export async function POST(req: Request) {
     );
   }
 
-  if (userSnap.exists) {
-    const role = userSnap.get("role") as string | undefined;
-    const assigned: string[] = userSnap.get("assignedSites") ?? [];
-    if (role === "employee" && assigned.length && !assigned.includes(siteId)) {
-      return jsonError("Site not assigned to you", 403);
+  let workerUid = decoded.uid;
+  let workerSnap = callerSnap;
+  let recordedByUid: string | undefined;
+
+  if (forWorkerId && forWorkerId !== decoded.uid) {
+    const subjectRef = db.collection("users").doc(forWorkerId);
+    const subjectSnap = await subjectRef.get();
+    if (!subjectSnap.exists) return jsonError("Worker not found", 404);
+    if (!canRecordAttendanceFor(callerSnap, subjectSnap)) {
+      return jsonError("Not allowed to record attendance for this worker", 403);
     }
+    workerUid = forWorkerId;
+    workerSnap = subjectSnap;
+    recordedByUid = decoded.uid;
   }
 
-  const day = attendanceDayKeyUTC();
-  const attRef = db.collection("attendance").doc(`${decoded.uid}_${day}`);
+  const role = workerSnap.get("role") as string | undefined;
+  const raw = workerSnap.get("assignedSites");
+  const assigned: string[] = Array.isArray(raw)
+    ? raw.filter((x): x is string => typeof x === "string")
+    : [];
+  if (role === "employee" && assigned.length > 0 && !assigned.includes(siteId)) {
+    return jsonError("Site not assigned to this worker", 403);
+  }
+
+  const tz = timeZoneFromUserSnapshot(workerSnap);
+  const day = calendarDateKeyInTimeZone(new Date(), tz);
+  const attRef = db.collection("attendance").doc(`${workerUid}_${day}`);
   const attSnap = await attRef.get();
   const existing = attSnap.data() as
     | {
@@ -96,20 +122,25 @@ export async function POST(req: Request) {
   }
 
   const now = FieldValue.serverTimestamp();
+  const checkInPayload: Record<string, unknown> = {
+    time: now,
+    gps: {
+      latitude,
+      longitude,
+      ...(accuracyM != null ? { accuracyM } : {}),
+    },
+    photoUrl,
+  };
+  if (recordedByUid) {
+    checkInPayload.recordedByUid = recordedByUid;
+  }
+
   await attRef.set(
     {
-      workerId: decoded.uid,
+      workerId: workerUid,
       siteId,
       date: day,
-      checkIn: {
-        time: now,
-        gps: {
-          latitude,
-          longitude,
-          ...(accuracyM != null ? { accuracyM } : {}),
-        },
-        photoUrl,
-      },
+      checkIn: checkInPayload,
       status: "present",
       siteSwitchLogs: Array.isArray(existing?.siteSwitchLogs)
         ? existing!.siteSwitchLogs

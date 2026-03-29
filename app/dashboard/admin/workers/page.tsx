@@ -1,4 +1,10 @@
+import { Suspense } from "react";
 import { AdminUsersPanel } from "@/components/client/admin-users-panel";
+import { TableRowsSkeleton } from "@/components/client/dashboard-skeletons";
+
+function WorkersBody() {
+  return <AdminUsersPanel />;
+}
 
 export default function AdminWorkersPage() {
   return (
@@ -9,7 +15,15 @@ export default function AdminWorkersPage() {
           Directory, password reset links, and per-user attendance calendars.
         </p>
       </div>
-      <AdminUsersPanel />
+      <Suspense
+        fallback={
+          <div className="rounded-xl border border-white/10 p-4">
+            <TableRowsSkeleton rows={8} />
+          </div>
+        }
+      >
+        <WorkersBody />
+      </Suspense>
     </div>
   );
 }

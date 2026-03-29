@@ -13,15 +13,21 @@ export function BasemapLayerControl({
   value,
   onChange,
   className,
+  /** Light chrome for maps on paper / light sheets (custom site modal). */
+  tone = "dark",
 }: {
   value: BasemapId;
   onChange: (id: BasemapId) => void;
   className?: string;
+  tone?: "dark" | "light";
 }) {
   return (
     <div
       className={cn(
-        "absolute right-2 top-2 z-[1000] flex overflow-hidden rounded-lg border border-white/20 bg-black/70 text-xs shadow-lg backdrop-blur-sm",
+        "absolute right-2 top-2 z-[1000] flex overflow-hidden rounded-lg text-xs shadow-lg backdrop-blur-sm",
+        tone === "light"
+          ? "border border-zinc-300 bg-white/95 dark:border-zinc-600 dark:bg-zinc-900/95"
+          : "border border-white/20 bg-black/70",
         className
       )}
     >
@@ -37,8 +43,12 @@ export function BasemapLayerControl({
           className={cn(
             "px-3 py-1.5 font-medium transition-colors",
             value === id
-              ? "bg-cyan-500/30 text-cyan-100"
-              : "text-zinc-300 hover:bg-white/10"
+              ? tone === "light"
+                ? "bg-cyan-600/15 text-cyan-900 dark:bg-cyan-500/25 dark:text-cyan-100"
+                : "bg-cyan-500/30 text-cyan-100"
+              : tone === "light"
+                ? "text-zinc-600 hover:bg-zinc-100 dark:text-zinc-400 dark:hover:bg-zinc-800"
+                : "text-zinc-300 hover:bg-white/10"
           )}
           onClick={() => onChange(id)}
         >

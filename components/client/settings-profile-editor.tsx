@@ -18,6 +18,7 @@ import {
 } from "@/components/ui/card";
 import { getFirebaseAuth, getFirebaseDb } from "@/lib/firebase/client";
 import { useDashboardUser } from "@/components/client/dashboard-user-context";
+import { Skeleton } from "@/components/ui/skeleton";
 
 function hasEmailPasswordProvider(): boolean {
   const u = getFirebaseAuth().currentUser;
@@ -156,8 +157,11 @@ export function SettingsProfileEditor() {
   if (loading || !user) {
     return (
       <Card className="md:col-span-2">
-        <CardContent className="pt-6">
-          <p className="text-sm text-zinc-400">Loading profile…</p>
+        <CardContent className="space-y-3 pt-6" aria-hidden>
+          <Skeleton className="h-6 w-32" />
+          <Skeleton className="h-10 w-full rounded-xl" />
+          <Skeleton className="h-10 w-full rounded-xl" />
+          <Skeleton className="h-24 w-full rounded-xl" />
         </CardContent>
       </Card>
     );
@@ -168,7 +172,7 @@ export function SettingsProfileEditor() {
       <Card className="md:min-h-0">
         <CardHeader>
           <CardTitle>Edit name</CardTitle>
-          <CardDescription>Updates your display name in LetsAttend.</CardDescription>
+          <CardDescription>Updates your display name in MTESAttandance.</CardDescription>
         </CardHeader>
         <CardContent className="flex flex-col gap-3">
           <label className="flex flex-col gap-1 text-sm">

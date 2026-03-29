@@ -4,6 +4,7 @@ import { requireBearerUser } from "@/lib/auth/verify-request";
 import { jsonError } from "@/lib/api/json-error";
 import { isRequestAdmin } from "@/lib/auth/require-admin";
 import { isSuperAdminDecoded, isSuperAdminUserRow } from "@/lib/auth/super-admin";
+import { normalizeTimeZoneId } from "@/lib/date/time-zone";
 
 export const runtime = "nodejs";
 
@@ -25,6 +26,9 @@ export async function GET(req: Request) {
       email: typeof data.email === "string" ? data.email : "",
       role: typeof data.role === "string" ? data.role : "employee",
       assignedSites: Array.isArray(data.assignedSites) ? data.assignedSites : [],
+      timeZone: normalizeTimeZoneId(
+        typeof data.timeZone === "string" ? data.timeZone : undefined
+      ),
     };
   });
 

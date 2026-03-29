@@ -24,7 +24,7 @@ export async function GET(req: Request) {
   try {
     const res = await fetch(nominatimUrl, {
       headers: {
-        "User-Agent": "LetsAttend/1.0 (internal geocoding; contact: app admin)",
+        "User-Agent": "MTESAttandance/1.0 (internal geocoding; contact: app admin)",
         "Accept-Language": "en",
       },
       next: { revalidate: 0 },

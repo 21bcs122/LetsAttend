@@ -17,6 +17,9 @@ import {
 } from "@/components/client/map/basemap-layer-control";
 import { DEFAULT_BASEMAP, type BasemapId } from "@/lib/map/tile-layers";
 import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
+
+export type SitePinChrome = "admin" | "sheet";
 
 const markerIconUrl = new URL(
   "leaflet/dist/images/marker-icon.png",
@@ -80,6 +83,7 @@ function SitePinMapBody({
   recenterAt,
   recenterSeq,
   resizeSignal,
+  mapChrome,
 }: {
   value: LatLng | null;
   onChange: (latlng: LatLng) => void;
@@ -88,6 +92,7 @@ function SitePinMapBody({
   recenterAt?: LatLng | null;
   recenterSeq?: number;
   resizeSignal?: unknown;
+  mapChrome: SitePinChrome;
 }) {
   const [basemap, setBasemap] = React.useState<BasemapId>(DEFAULT_BASEMAP);
   const [center, setCenter] = React.useState<LatLng>({
@@ -120,7 +125,14 @@ function SitePinMapBody({
   const lng = value?.longitude ?? center.longitude;
 
   return (
-    <div className="relative overflow-hidden rounded-2xl border border-white/10 bg-black/20">
+    <div
+      className={cn(
+        "relative overflow-hidden rounded-2xl",
+        mapChrome === "sheet"
+          ? "border border-zinc-200 bg-zinc-100 dark:border-zinc-600 dark:bg-zinc-800/50"
+          : "border border-white/10 bg-black/20"
+      )}
+    >
       <div style={{ height: cssHeight(height) }}>
         <MapContainer
           center={[lat, lng]}
@@ -132,7 +144,11 @@ function SitePinMapBody({
             <InvalidateSizeOn when={resizeSignal} />
           ) : null}
           <BasemapTileLayer basemap={basemap} />
-          <BasemapLayerControl value={basemap} onChange={setBasemap} />
+          <BasemapLayerControl
+            value={basemap}
+            onChange={setBasemap}
+            tone={mapChrome === "sheet" ? "light" : "dark"}
+          />
           <FlyTo target={recenterAt ?? null} seq={recenterSeq ?? 0} />
           <ClickToPick onPick={onChange} />
           {value ? (
@@ -161,6 +177,8 @@ export function SitePinPicker({
   recenterAt,
   recenterSeq = 0,
   enableFullscreen = false,
+  /** `sheet` = light/dark-aware frame (employee custom site modal). */
+  mapChrome = "admin",
 }: {
   value: LatLng | null;
   onChange: (latlng: LatLng) => void;
@@ -172,6 +190,7 @@ export function SitePinPicker({
   recenterSeq?: number;
   /** Open a full-viewport map for precise pin placement. */
   enableFullscreen?: boolean;
+  mapChrome?: SitePinChrome;
 }) {
   const [fullscreen, setFullscreen] = React.useState(false);
 
@@ -196,8 +215,14 @@ export function SitePinPicker({
       recenterAt={recenterAt}
       recenterSeq={recenterSeq}
       resizeSignal={fullscreen}
+      mapChrome={mapChrome}
     />
   );
+
+  const fsBtnCls =
+    mapChrome === "sheet"
+      ? "gap-1.5 border-zinc-300 bg-white text-zinc-900 hover:bg-zinc-50 dark:border-zinc-600 dark:bg-zinc-800 dark:text-zinc-100 dark:hover:bg-zinc-700"
+      : "gap-1.5";
 
   const fullscreenEntry =
     enableFullscreen && !fullscreen ? (
@@ -206,7 +231,7 @@ export function SitePinPicker({
           type="button"
           variant="secondary"
           size="sm"
-          className="gap-1.5"
+          className={fsBtnCls}
           onClick={() => setFullscreen(true)}
         >
           <Maximize2 className="size-4" />
@@ -218,15 +243,36 @@ export function SitePinPicker({
   if (fullscreen && enableFullscreen && typeof document !== "undefined") {
     return createPortal(
       <div
-        className="fixed inset-0 z-[300] flex flex-col bg-zinc-950/98 p-4 backdrop-blur-sm"
+        className={cn(
+          "fixed inset-0 z-[8500] flex flex-col p-4 backdrop-blur-sm",
+          mapChrome === "sheet"
+            ? "bg-white/98 dark:bg-zinc-950/98"
+            : "bg-zinc-950/98"
+        )}
         role="dialog"
         aria-modal="true"
         aria-label="Place site pin"
       >
         <div className="mb-2 flex items-start justify-between gap-3">
           <div>
-            <p className="text-sm font-medium text-zinc-100">Place site pin</p>
-            <p className="mt-1 text-xs text-zinc-500">
+            <p
+              className={cn(
+                "text-sm font-medium",
+                mapChrome === "sheet"
+                  ? "text-zinc-900 dark:text-zinc-100"
+                  : "text-zinc-100"
+              )}
+            >
+              Place site pin
+            </p>
+            <p
+              className={cn(
+                "mt-1 text-xs",
+                mapChrome === "sheet"
+                  ? "text-zinc-600 dark:text-zinc-400"
+                  : "text-zinc-500"
+              )}
+            >
               Click or drag the marker. Use Satellite for an overhead view.
             </p>
           </div>
@@ -234,7 +280,7 @@ export function SitePinPicker({
             type="button"
             variant="secondary"
             size="sm"
-            className="gap-1.5"
+            className={fsBtnCls}
             onClick={() => setFullscreen(false)}
           >
             <X className="size-4" />
@@ -249,7 +295,14 @@ export function SitePinPicker({
 
   return (
     <div className="w-full">
-      <div className="mb-3 text-sm text-zinc-300">
+      <div
+        className={cn(
+          "mb-3 text-sm",
+          mapChrome === "sheet"
+            ? "text-zinc-600 dark:text-zinc-400 [&_strong]:font-semibold [&_strong]:text-zinc-800 dark:[&_strong]:text-zinc-200"
+            : "text-zinc-300"
+        )}
+      >
         Click the map to place the pin, or drag the pin. Use <strong>Satellite</strong> for an
         overhead view of the workplace.
       </div>

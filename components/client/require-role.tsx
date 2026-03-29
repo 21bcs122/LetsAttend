@@ -5,6 +5,7 @@ import * as React from "react";
 import { useRouter } from "next/navigation";
 import { doc, getDoc } from "firebase/firestore";
 import { getFirebaseAuth, getFirebaseDb } from "@/lib/firebase/client";
+import { PageLoadingSkeleton } from "@/components/client/dashboard-skeletons";
 
 const SUPER_ADMIN_EMAIL = process.env.NEXT_PUBLIC_SUPER_ADMIN_EMAIL;
 
@@ -57,11 +58,7 @@ export function RequireRole({
   }, [allowedRoles, fallbackTo, router]);
 
   if (!ready) {
-    return (
-      <div className="flex min-h-[40vh] items-center justify-center text-sm text-zinc-400">
-        Loading permissions…
-      </div>
-    );
+    return <PageLoadingSkeleton label="Loading permissions" />;
   }
 
   return <>{children}</>;

@@ -10,6 +10,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { Skeleton } from "@/components/ui/skeleton";
 
 export type AdminDashboardMetrics = {
   activeWorkers: number;
@@ -150,7 +151,8 @@ export function AdminDashboardStats() {
     );
   }
 
-  const show = loading ? "—" : null;
+  const statSlot = (value: number) =>
+    loading ? <Skeleton className="h-9 w-16" /> : <span>{value}</span>;
 
   return (
     <div className="grid gap-4 lg:grid-cols-4">
@@ -160,9 +162,7 @@ export function AdminDashboardStats() {
           <CardDescription>Live GPS pings (&lt; 2 minutes)</CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="text-3xl font-semibold">
-            {loading ? show : s.activeWorkers}
-          </div>
+          <div className="text-3xl font-semibold">{statSlot(s.activeWorkers)}</div>
         </CardContent>
       </Card>
 
@@ -172,9 +172,7 @@ export function AdminDashboardStats() {
           <CardDescription>All workers who checked in</CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="text-3xl font-semibold">
-            {loading ? show : s.totalCheckIns}
-          </div>
+          <div className="text-3xl font-semibold">{statSlot(s.totalCheckIns)}</div>
         </CardContent>
       </Card>
 
@@ -184,9 +182,7 @@ export function AdminDashboardStats() {
           <CardDescription>Checked in + checked out</CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="text-3xl font-semibold">
-            {loading ? show : s.completed}
-          </div>
+          <div className="text-3xl font-semibold">{statSlot(s.completed)}</div>
           {!loading && (
             <div className="mt-2 text-sm text-zinc-400">
               {s.completionRate}% completion
@@ -198,12 +194,10 @@ export function AdminDashboardStats() {
       <Card>
         <CardHeader>
           <CardTitle>Late arrivals</CardTitle>
-          <CardDescription>Dev threshold: after 09:00 UTC</CardDescription>
+          <CardDescription>Dev threshold: after 09:00 NPT</CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="text-3xl font-semibold">
-            {loading ? show : s.lateArrivals}
-          </div>
+          <div className="text-3xl font-semibold">{statSlot(s.lateArrivals)}</div>
         </CardContent>
       </Card>
     </div>
@@ -220,7 +214,9 @@ export function AdminPendingCheckoutsCard() {
         <CardDescription>Checked in but not checked out yet</CardDescription>
       </CardHeader>
       <CardContent>
-        <div className="text-3xl font-semibold">{loading ? "—" : s.pending}</div>
+        <div className="text-3xl font-semibold">
+          {loading ? <Skeleton className="h-9 w-12" /> : s.pending}
+        </div>
       </CardContent>
     </Card>
   );

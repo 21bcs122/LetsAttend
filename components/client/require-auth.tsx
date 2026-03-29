@@ -4,6 +4,7 @@ import { onAuthStateChanged } from "firebase/auth";
 import { useRouter } from "next/navigation";
 import * as React from "react";
 import { getFirebaseAuth } from "@/lib/firebase/client";
+import { PageLoadingSkeleton } from "@/components/client/dashboard-skeletons";
 
 export function RequireAuth({ children }: { children: React.ReactNode }) {
   const [ready, setReady] = React.useState(false);
@@ -28,11 +29,7 @@ export function RequireAuth({ children }: { children: React.ReactNode }) {
   }, [router]);
 
   if (!ready) {
-    return (
-      <div className="flex min-h-[40vh] items-center justify-center text-sm text-zinc-400">
-        Loading session…
-      </div>
-    );
+    return <PageLoadingSkeleton label="Loading session" />;
   }
 
   if (!signedIn) {

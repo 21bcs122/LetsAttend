@@ -1,35 +1,65 @@
 /**
- * One-off: generates PWA icons in public/icons/. Run: node scripts/generate-pwa-icons.mjs
+ * Builds favicon + PWA icons from `public/branding/mtes-logo.png`.
+ * Run: node scripts/generate-pwa-icons.mjs
  */
-import { mkdirSync } from "node:fs";
+import { mkdirSync, existsSync } from "node:fs";
 import { join } from "node:path";
 import sharp from "sharp";
 
-const dir = join(process.cwd(), "public", "icons");
-mkdirSync(dir, { recursive: true });
+const cwd = process.cwd();
+const src = join(cwd, "public", "branding", "mtes-logo.png");
+const iconsDir = join(cwd, "public", "icons");
+const appDir = join(cwd, "app");
 
-const accent = "#22d3ee";
-const bg = "#0a0a0a";
-
-const iconSvg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
-  <rect width="512" height="512" rx="64" fill="${bg}"/>
-  <circle cx="256" cy="220" r="56" fill="none" stroke="${accent}" stroke-width="28"/>
-  <path d="M160 380c32-48 80-72 96-72s64 24 96 72" fill="none" stroke="${accent}" stroke-width="24" stroke-linecap="round"/>
-</svg>`;
-
-const maskableSvg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
-  <rect width="512" height="512" rx="128" fill="${bg}"/>
-  <circle cx="256" cy="220" r="48" fill="none" stroke="${accent}" stroke-width="24"/>
-  <path d="M168 384c36-44 88-68 88-68s52 24 88 68" fill="none" stroke="${accent}" stroke-width="22" stroke-linecap="round"/>
-</svg>`;
-
-for (const size of [192, 512]) {
-  await sharp(Buffer.from(iconSvg)).resize(size, size).png().toFile(join(dir, `icon-${size}.png`));
+if (!existsSync(src)) {
+  console.error("Missing source logo:", src);
+  process.exit(1);
 }
 
-await sharp(Buffer.from(maskableSvg))
-  .resize(512, 512)
-  .png()
-  .toFile(join(dir, "icon-maskable-512.png"));
+mkdirSync(iconsDir, { recursive: true });
 
-console.log("Wrote public/icons/icon-192.png, icon-512.png, icon-maskable-512.png");
+/** Matches app manifest / dark chrome. */
+const bg = { r: 10, g: 10, b: 10, alpha: 1 };
+
+function squareFromLogo(size) {
+  return sharp(src).resize(size, size, {
+    fit: "contain",
+    position: "center",
+    background: bg,
+  });
+}
+
+for (const size of [192, 512]) {
+  await squareFromLogo(size).png().toFile(join(iconsDir, `icon-${size}.png`));
+}
+
+/** Maskable safe zone (~80%): smaller logo with padding for Android adaptive icons. */
+const maskSize = 512;
+const inner = Math.round(maskSize * 0.62);
+const pad = Math.floor((maskSize - inner) / 2);
+const innerBuf = await sharp(src)
+  .resize(inner, inner, { fit: "contain", position: "center", background: bg })
+  .png()
+  .toBuffer();
+
+await sharp({
+  create: {
+    width: maskSize,
+    height: maskSize,
+    channels: 4,
+    background: bg,
+  },
+})
+  .composite([{ input: innerBuf, left: pad, top: pad }])
+  .png()
+  .toFile(join(iconsDir, "icon-maskable-512.png"));
+
+/** Next.js App Router favicon (`<link rel="icon">`). */
+await squareFromLogo(48).png().toFile(join(appDir, "icon.png"));
+
+/** Apple touch icon (optional dedicated file; layout also references /icons). */
+await squareFromLogo(180).png().toFile(join(appDir, "apple-icon.png"));
+
+console.log(
+  "Wrote public/icons/icon-192.png, icon-512.png, icon-maskable-512.png, app/icon.png, app/apple-icon.png"
+);

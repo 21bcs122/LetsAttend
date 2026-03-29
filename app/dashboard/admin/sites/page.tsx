@@ -1,24 +1,25 @@
 "use client";
 
 import * as React from "react";
+import { Suspense } from "react";
+import { useSearchParams } from "next/navigation";
 import { AdminCreateSiteForm } from "@/components/client/admin-create-site-form";
 import { AdminSitesPanel } from "@/components/client/admin-sites-panel";
 import { cn } from "@/lib/utils";
+import { CardBlockSkeleton } from "@/components/client/dashboard-skeletons";
 
-export default function AdminSitesPage() {
+function AdminSitesContent() {
+  const searchParams = useSearchParams();
+  const siteFromQuery = searchParams.get("site")?.trim() ?? "";
   const [reloadToken, setReloadToken] = React.useState(0);
   const [tab, setTab] = React.useState<"browse" | "create">("browse");
 
-  return (
-    <div className="p-3 md:p-8">
-      <div className="mb-6">
-        <h1 className="text-2xl font-semibold tracking-tight">Sites</h1>
-        <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
-          Browse work locations, geofences, and live activity per site. Create new sites in a separate
-          tab.
-        </p>
-      </div>
+  React.useEffect(() => {
+    if (siteFromQuery) setTab("browse");
+  }, [siteFromQuery]);
 
+  return (
+    <>
       <div className="mb-6 flex flex-wrap gap-2 border-b border-white/10 pb-3">
         <button
           type="button"
@@ -47,7 +48,7 @@ export default function AdminSitesPage() {
       </div>
 
       {tab === "browse" ? (
-        <AdminSitesPanel reloadToken={reloadToken} />
+        <AdminSitesPanel reloadToken={reloadToken} initialSiteId={siteFromQuery || undefined} />
       ) : (
         <AdminCreateSiteForm
           onCreated={() => {
@@ -56,6 +57,24 @@ export default function AdminSitesPage() {
           }}
         />
       )}
+    </>
+  );
+}
+
+export default function AdminSitesPage() {
+  return (
+    <div className="p-3 md:p-8">
+      <div className="mb-6">
+        <h1 className="text-2xl font-semibold tracking-tight">Sites</h1>
+        <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
+          Browse work locations, geofences, and live activity per site. Create new sites in a separate
+          tab.
+        </p>
+      </div>
+
+      <Suspense fallback={<CardBlockSkeleton lines={3} />}>
+        <AdminSitesContent />
+      </Suspense>
     </div>
   );
 }

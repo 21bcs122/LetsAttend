@@ -1,15 +1,20 @@
 "use client";
 
 import { onAuthStateChanged } from "firebase/auth";
-import { doc, getDoc, updateDoc } from "firebase/firestore";
+import { doc, onSnapshot, updateDoc } from "firebase/firestore";
 import * as React from "react";
 import { getFirebaseAuth, getFirebaseDb } from "@/lib/firebase/client";
+import { normalizeTimeZoneId } from "@/lib/date/time-zone";
 
 export type DashboardUser = {
   uid: string;
   name: string;
   email: string;
   role: string;
+  /** Employee work sites (from Firestore). Empty until an admin assigns. */
+  assignedSites: string[];
+  /** IANA timezone for attendance calendar days (default Nepal). */
+  timeZone: string;
 };
 
 const SUPER_ADMIN_EMAIL = process.env.NEXT_PUBLIC_SUPER_ADMIN_EMAIL;
@@ -23,60 +28,87 @@ const Ctx = React.createContext<{
 export function DashboardUserProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = React.useState<DashboardUser | null>(null);
   const [loading, setLoading] = React.useState(true);
-  const version = React.useRef(0);
 
-  const load = React.useCallback(async (uid: string, email: string | null) => {
-    const v = ++version.current;
-    try {
-      const db = getFirebaseDb();
-      const snap = await getDoc(doc(db, "users", uid));
-      const data = snap.data();
-      const name = (data?.name as string) || email?.split("@")[0] || "User";
-      let role = (data?.role as string) || "employee";
-      if (SUPER_ADMIN_EMAIL && email === SUPER_ADMIN_EMAIL) {
-        role = "super_admin";
-      }
-      const fsEmail = typeof data?.email === "string" ? data.email : "";
-      if (email && snap.exists() && fsEmail !== email) {
-        try {
-          await updateDoc(doc(db, "users", uid), { email });
-        } catch {
-          /* ignore sync errors */
-        }
-      }
-      if (v !== version.current) return;
-      setUser({ uid, name, email: email ?? "", role });
-    } catch {
-      if (v !== version.current) return;
-      setUser({
-        uid,
-        name: email?.split("@")[0] || "User",
-        email: email ?? "",
-        role: SUPER_ADMIN_EMAIL && email === SUPER_ADMIN_EMAIL ? "super_admin" : "employee",
-      });
-    } finally {
-      if (v === version.current) setLoading(false);
-    }
-  }, []);
+  /** No-op: user doc is kept in sync via `onSnapshot`. Call sites still invoke this after writes. */
+  const refresh = React.useCallback(() => {}, []);
 
   React.useEffect(() => {
     const auth = getFirebaseAuth();
-    const unsub = onAuthStateChanged(auth, (u) => {
+    let unsubDoc: (() => void) | undefined;
+
+    const unsubAuth = onAuthStateChanged(auth, (u) => {
+      unsubDoc?.();
       if (!u) {
         setUser(null);
         setLoading(false);
         return;
       }
-      setLoading(true);
-      void load(u.uid, u.email);
-    });
-    return () => unsub();
-  }, [load]);
 
-  const refresh = React.useCallback(() => {
-    const u = getFirebaseAuth().currentUser;
-    if (u) void load(u.uid, u.email);
-  }, [load]);
+      setLoading(true);
+      const db = getFirebaseDb();
+      const userRef = doc(db, "users", u.uid);
+
+      unsubDoc = onSnapshot(
+        userRef,
+        async (snap) => {
+          const email = u.email;
+          const data = snap.data();
+          const name = (data?.name as string) || email?.split("@")[0] || "User";
+          let role = (data?.role as string) || "employee";
+          if (SUPER_ADMIN_EMAIL && email === SUPER_ADMIN_EMAIL) {
+            role = "super_admin";
+          }
+          const fsEmail = typeof data?.email === "string" ? data.email : "";
+          const assignedSites = Array.isArray(data?.assignedSites)
+            ? (data.assignedSites as unknown[]).filter((x): x is string => typeof x === "string")
+            : [];
+          const timeZone = normalizeTimeZoneId(
+            typeof data?.timeZone === "string" ? data.timeZone : undefined
+          );
+
+          if (email && snap.exists() && fsEmail !== email) {
+            try {
+              await updateDoc(userRef, { email });
+            } catch {
+              /* ignore sync errors */
+            }
+          }
+
+          setUser({
+            uid: u.uid,
+            name,
+            email: email ?? "",
+            role,
+            assignedSites,
+            timeZone,
+          });
+          setLoading(false);
+        },
+        () => {
+          // Keep last good snapshot so assignedSites does not flash empty on transient errors.
+          setUser((prev) =>
+            prev && prev.uid === u.uid
+              ? prev
+              : {
+                  uid: u.uid,
+                  name: u.email?.split("@")[0] || "User",
+                  email: u.email ?? "",
+                  role:
+                    SUPER_ADMIN_EMAIL && u.email === SUPER_ADMIN_EMAIL ? "super_admin" : "employee",
+                  assignedSites: [],
+                  timeZone: normalizeTimeZoneId(undefined),
+                }
+          );
+          setLoading(false);
+        }
+      );
+    });
+
+    return () => {
+      unsubDoc?.();
+      unsubAuth();
+    };
+  }, []);
 
   return (
     <Ctx.Provider value={{ user, loading, refresh }}>{children}</Ctx.Provider>

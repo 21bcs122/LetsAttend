@@ -9,6 +9,7 @@ import {
   MapContainer,
   Marker,
   Popup,
+  Tooltip,
   useMap,
 } from "react-leaflet";
 import { Maximize2, X } from "lucide-react";
@@ -19,14 +20,24 @@ import {
 import { DEFAULT_BASEMAP, type BasemapId } from "@/lib/map/tile-layers";
 import { getFirebaseAuth } from "@/lib/firebase/client";
 import { Button } from "@/components/ui/button";
+import { SearchableSelect } from "@/components/ui/searchable-select";
 import { cn } from "@/lib/utils";
+import { formatInstantTime12hLocal } from "@/lib/time/format-wall-time";
 
 type LiveWorker = {
   workerId: string;
+  workerName?: string | null;
   latitude: number;
   longitude: number;
   accuracyM?: number;
   lastUpdatedMs?: number | null;
+};
+
+type JumpSite = {
+  id: string;
+  name: string;
+  latitude: number;
+  longitude: number;
 };
 
 type SiteGeofence = {
@@ -76,6 +87,97 @@ function InvalidateSizeOn({ when }: { when: unknown }) {
     return () => window.clearTimeout(t);
   }, [map, when]);
   return null;
+}
+
+function MapJumpToolbar({
+  points,
+  site,
+  jumpSites,
+}: {
+  points: LiveWorker[];
+  site: SiteGeofence | null;
+  jumpSites: JumpSite[] | undefined;
+}) {
+  const map = useMap();
+  const [workerPick, setWorkerPick] = React.useState("");
+  const [sitePick, setSitePick] = React.useState("");
+
+  const flyTo = React.useCallback(
+    (lat: number, lng: number, zoom = 17) => {
+      if (!Number.isFinite(lat) || !Number.isFinite(lng)) return;
+      map.flyTo([lat, lng], zoom, { duration: 0.55 });
+    },
+    [map]
+  );
+
+  return (
+    <div className="pointer-events-auto absolute right-3 top-14 z-[1000] flex w-[min(220px,calc(100%-24px))] flex-col gap-2 rounded-xl border border-white/15 bg-zinc-950/92 p-2.5 text-xs shadow-lg backdrop-blur-sm">
+      <div>
+        <label className="mb-1 block text-[10px] font-medium uppercase tracking-wide text-zinc-500">
+          Go to worker
+        </label>
+        <SearchableSelect
+          value={workerPick}
+          onValueChange={(v) => {
+            setWorkerPick(v);
+            const p = points.find((x) => x.workerId === v);
+            if (p && Number.isFinite(p.latitude) && Number.isFinite(p.longitude)) {
+              flyTo(p.latitude, p.longitude, 18);
+            }
+          }}
+          options={points.map((p) => ({
+            value: p.workerId,
+            label: p.workerName?.trim() || p.workerId,
+          }))}
+          emptyLabel="— Select —"
+          searchPlaceholder="Search workers…"
+          triggerClassName="h-9 w-full rounded-lg border border-white/10 bg-black/50 px-2 py-1.5 text-xs text-zinc-200"
+          popoverContentClassName="z-[2200]"
+          popoverModal={false}
+          listClassName="max-h-[min(240px,40vh)]"
+        />
+      </div>
+      {site ? (
+        <Button
+          type="button"
+          variant="secondary"
+          size="sm"
+          className="h-8 w-full text-xs"
+          onClick={() => flyTo(site.latitude, site.longitude, 16)}
+        >
+          Site center (this geofence)
+        </Button>
+      ) : null}
+      {jumpSites && jumpSites.length > 0 ? (
+        <div>
+          <label className="mb-1 block text-[10px] font-medium uppercase tracking-wide text-zinc-500">
+            Go to site
+          </label>
+          <SearchableSelect
+            value={sitePick}
+            onValueChange={(v) => {
+              setSitePick(v);
+              const s = jumpSites.find((x) => x.id === v);
+              if (s) flyTo(s.latitude, s.longitude, 15);
+            }}
+            options={jumpSites.map((s) => ({
+              value: s.id,
+              label: s.name,
+            }))}
+            emptyLabel="— Select —"
+            searchPlaceholder="Search sites…"
+            triggerClassName="h-9 w-full rounded-lg border border-white/10 bg-black/50 px-2 py-1.5 text-xs text-zinc-200"
+            popoverContentClassName="z-[2200]"
+            popoverModal={false}
+            listClassName="max-h-[min(240px,40vh)]"
+          />
+        </div>
+      ) : null}
+      <p className="text-[10px] leading-snug text-zinc-500">
+        Pan and zoom still work as usual. Labels show who each marker is.
+      </p>
+    </div>
+  );
 }
 
 function FitSiteAndPoints({
@@ -130,6 +232,7 @@ function LiveWorkersMapInner({
   mapHeight,
   resizeSignal,
   rounded,
+  jumpSites,
 }: {
   pollMs: number;
   siteId: string | null | undefined;
@@ -137,6 +240,7 @@ function LiveWorkersMapInner({
   /** Bump when container size changes (e.g. fullscreen) so Leaflet redraws. */
   resizeSignal: unknown;
   rounded: boolean;
+  jumpSites: JumpSite[] | undefined;
 }) {
   const [basemap, setBasemap] = React.useState<BasemapId>(DEFAULT_BASEMAP);
   const [points, setPoints] = React.useState<LiveWorker[]>([]);
@@ -240,6 +344,7 @@ function LiveWorkersMapInner({
           <InvalidateSizeOn when={resizeSignal} />
           <BasemapTileLayer basemap={basemap} />
           <BasemapLayerControl value={basemap} onChange={setBasemap} />
+          <MapJumpToolbar points={points} site={site} jumpSites={jumpSites} />
           {site ? (
             <Circle
               center={[site.latitude, site.longitude]}
@@ -255,20 +360,29 @@ function LiveWorkersMapInner({
           {points.length || site ? (
             <FitSiteAndPoints site={site} points={points} />
           ) : null}
-          {points.map((p) => (
-            <Marker key={p.workerId} position={[p.latitude, p.longitude]}>
-              <Popup>
-                <div className="min-w-[180px]">
-                  <div className="text-sm font-medium">{p.workerId}</div>
-                  <div className="mt-1 text-xs text-zinc-600">
-                    {typeof p.lastUpdatedMs === "number"
-                      ? `Updated: ${new Date(p.lastUpdatedMs).toLocaleTimeString()}`
-                      : "Last update: unknown"}
+          {points.map((p) => {
+            const label = p.workerName?.trim() || p.workerId;
+            return (
+              <Marker key={p.workerId} position={[p.latitude, p.longitude]}>
+                <Tooltip permanent direction="top" offset={[0, -6]} opacity={1}>
+                  <span className="rounded-md bg-black/85 px-1.5 py-0.5 text-[11px] font-medium text-white shadow">
+                    {label}
+                  </span>
+                </Tooltip>
+                <Popup>
+                  <div className="min-w-[180px]">
+                    <div className="text-sm font-medium text-zinc-900">{label}</div>
+                    <div className="mt-0.5 font-mono text-[10px] text-zinc-600">{p.workerId}</div>
+                    <div className="mt-1 text-xs text-zinc-600">
+                      {typeof p.lastUpdatedMs === "number"
+                        ? `Updated: ${formatInstantTime12hLocal(p.lastUpdatedMs)}`
+                        : "Last update: unknown"}
+                    </div>
                   </div>
-                </div>
-              </Popup>
-            </Marker>
-          ))}
+                </Popup>
+              </Marker>
+            );
+          })}
         </MapContainer>
       </div>
     </div>
@@ -281,6 +395,7 @@ export function LiveWorkersMap({
   height = 420,
   showFullscreenButton = true,
   embedded = false,
+  jumpSites,
 }: {
   pollMs?: number;
   /** When set, only workers whose last GPS is inside this site's radius are shown. */
@@ -289,6 +404,8 @@ export function LiveWorkersMap({
   showFullscreenButton?: boolean;
   /** Tighter chrome when nested under site details. */
   embedded?: boolean;
+  /** Optional list for “Go to site” on the live map (global view). */
+  jumpSites?: JumpSite[];
 }) {
   const [fullscreen, setFullscreen] = React.useState(false);
 
@@ -311,6 +428,7 @@ export function LiveWorkersMap({
       mapHeight={fullscreen ? fsH : normalH}
       resizeSignal={fullscreen}
       rounded={!embedded || fullscreen}
+      jumpSites={jumpSites}
     />
   );
 

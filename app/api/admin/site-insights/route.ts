@@ -5,7 +5,8 @@ import { requireBearerUser } from "@/lib/auth/verify-request";
 import { jsonError } from "@/lib/api/json-error";
 import { isRequestAdmin } from "@/lib/auth/require-admin";
 import { isSuperAdminDecoded, isSuperAdminUserRow } from "@/lib/auth/super-admin";
-import { attendanceDayKeyUTC } from "@/lib/date/today-key";
+import { calendarDateKeyInTimeZone } from "@/lib/date/calendar-day-key";
+import { DEFAULT_ATTENDANCE_TIME_ZONE } from "@/lib/date/time-zone";
 
 export const runtime = "nodejs";
 
@@ -14,6 +15,11 @@ type SwitchLog = {
   toSiteId?: string;
   photoUrl?: string;
   at?: { toMillis?: () => number };
+  previousSiteCheckOut?: {
+    siteId?: string;
+    photoUrl?: string;
+    time?: { toMillis?: () => number };
+  };
 };
 
 type PhotoEvidence = {
@@ -87,7 +93,7 @@ export async function GET(req: Request) {
     .map((d) => userById.get(d.id)!)
     .filter(Boolean);
 
-  const day = attendanceDayKeyUTC();
+  const day = calendarDateKeyInTimeZone(new Date(), DEFAULT_ATTENDANCE_TIME_ZONE);
   const attTodaySnap = await db.collection("attendance").where("date", "==", day).get();
 
   const activeAtSite: {
@@ -164,6 +170,18 @@ export async function GET(req: Request) {
     }
 
     for (const log of logs) {
+      const ps = log.previousSiteCheckOut;
+      if (
+        log.fromSiteId === parsed.data &&
+        ps?.photoUrl &&
+        typeof ps.photoUrl === "string"
+      ) {
+        pushPhoto(wid, {
+          kind: "check_out",
+          photoUrl: ps.photoUrl,
+          atMs: timeMs(ps.time) ?? timeMs(log.at),
+        });
+      }
       if (
         log.toSiteId === parsed.data &&
         typeof log.photoUrl === "string" &&

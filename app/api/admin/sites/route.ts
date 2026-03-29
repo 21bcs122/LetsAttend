@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { FieldValue, adminDb } from "@/lib/firebase/admin";
+import { assertAdmin } from "@/lib/auth/assert-admin";
 import { requireBearerUser } from "@/lib/auth/verify-request";
 import { jsonError } from "@/lib/api/json-error";
 
@@ -8,19 +9,21 @@ export const runtime = "nodejs";
 
 const utcHm = z
   .string()
-  .regex(/^([01]\d|2[0-3]):[0-5]\d$/, "Use 24h UTC as HH:mm (e.g. 09:00)");
+  .regex(
+    /^([01]\d|2[0-3]):[0-5]\d$/,
+    "Use HH:mm on a 24-hour clock (e.g. 09:00 or 21:00), Nepal NPT — the UI uses AM/PM"
+  );
 
 const bodySchema = z.object({
   name: z.string().min(1),
   latitude: z.number().finite(),
   longitude: z.number().finite(),
   radius: z.number().positive().max(5000),
-  /** Optional expected start of workday (UTC), for display. */
+  /** Optional expected start of workday (24h wall time, NPT), for display. */
   workdayStartUtc: utcHm.optional(),
   /**
-   * End of workday (UTC). If the worker is still checked in after this time on that UTC day,
-   * the auto-checkout job will close the session (server-side).
-   * Defaults to 23:59 UTC.
+   * End of workday (24h wall time, NPT). If the worker is still checked in after this time on that
+   * calendar day, the auto-checkout job will close the session (server-side). Defaults to 23:59.
    */
   autoCheckoutUtc: utcHm.optional(),
 });
@@ -39,20 +42,6 @@ const patchSchema = z.object({
   workdayStartUtc: z.union([utcHm, z.literal("")]).optional(),
   autoCheckoutUtc: utcHm.optional(),
 });
-
-async function assertAdmin(
-  uid: string,
-  email: string | undefined
-): Promise<Response | null> {
-  const superEmail = process.env.SUPER_ADMIN_EMAIL;
-  if (superEmail && email === superEmail) return null;
-
-  const db = adminDb();
-  const snap = await db.collection("users").doc(uid).get();
-  const role = snap.get("role") as string | undefined;
-  if (role === "admin" || role === "super_admin") return null;
-  return jsonError("Forbidden", 403);
-}
 
 export async function POST(req: Request) {
   const auth = await requireBearerUser(req);

@@ -9,7 +9,14 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { getFirebaseAuth } from "@/lib/firebase/client";
-import { attendanceDayKeyUTC } from "@/lib/date/today-key";
+import { Skeleton } from "@/components/ui/skeleton";
+import { useDashboardUser } from "@/components/client/dashboard-user-context";
+import { calendarDateKeyInTimeZone } from "@/lib/date/calendar-day-key";
+import { normalizeTimeZoneId, workTimeZoneUiLabel } from "@/lib/date/time-zone";
+import {
+  formatInstantTime12hInZone,
+  formatWallHm12h,
+} from "@/lib/time/format-wall-time";
 
 type TodayPayload = {
   day: string;
@@ -36,21 +43,28 @@ type TodayPayload = {
     toSiteName?: string | null;
     photoUrl?: unknown;
     atMs?: number | null;
+    previousSiteCheckOut?: {
+      siteId?: string;
+      siteName?: string | null;
+      atMs?: number | null;
+      photoUrl?: string | null;
+      gps?: unknown;
+    } | null;
   }[];
 };
 
-function fmtTime(ms: number | null | undefined) {
+function fmtTime(ms: number | null | undefined, displayTimeZone: string) {
   if (ms == null || !Number.isFinite(ms)) return "—";
-  return new Date(ms).toLocaleTimeString(undefined, {
-    hour: "2-digit",
-    minute: "2-digit",
-    second: "2-digit",
-    timeZone: "UTC",
-    timeZoneName: "short",
+  return formatInstantTime12hInZone(ms, displayTimeZone, {
+    withSeconds: true,
+    withTimeZoneName: true,
   });
 }
 
 export function EmployeeTodayActivity() {
+  const { user } = useDashboardUser();
+  const displayTz = normalizeTimeZoneId(user?.timeZone);
+  const zoneLabel = workTimeZoneUiLabel(displayTz);
   const [data, setData] = React.useState<TodayPayload | null>(null);
   const [loading, setLoading] = React.useState(true);
   const [err, setErr] = React.useState<string | null>(null);
@@ -63,7 +77,7 @@ export function EmployeeTodayActivity() {
       const u = auth.currentUser;
       if (!u) throw new Error("Not signed in");
       const token = await u.getIdToken();
-      const day = attendanceDayKeyUTC();
+      const day = calendarDateKeyInTimeZone(new Date(), displayTz);
       const res = await fetch(`/api/attendance/today?day=${encodeURIComponent(day)}`, {
         headers: { Authorization: `Bearer ${token}` },
       });
@@ -76,7 +90,7 @@ export function EmployeeTodayActivity() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [displayTz]);
 
   React.useEffect(() => {
     void load();
@@ -85,7 +99,13 @@ export function EmployeeTodayActivity() {
   }, [load]);
 
   if (loading && !data) {
-    return <p className="text-sm text-zinc-400">Loading today&apos;s activity…</p>;
+    return (
+      <div className="space-y-3" aria-hidden>
+        <Skeleton className="h-4 w-48" />
+        <Skeleton className="h-32 rounded-xl" />
+        <Skeleton className="h-24 rounded-xl" />
+      </div>
+    );
   }
   if (err) {
     return <p className="text-sm text-red-400">{err}</p>;
@@ -96,8 +116,9 @@ export function EmployeeTodayActivity() {
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <p className="text-sm text-zinc-500">
-          UTC day <span className="font-mono text-zinc-300">{data.day}</span> — times shown in UTC
-          (same calendar as check-in records).
+          Work date{" "}
+          <span className="font-mono text-zinc-300">{data.day}</span> — times in your profile timezone
+          (same calendar as check-in).
         </p>
         <button
           type="button"
@@ -140,14 +161,16 @@ export function EmployeeTodayActivity() {
               <ul className="space-y-1">
                 {data.workdayStartUtc ? (
                   <li>
-                    Expected start (UTC):{" "}
-                    <span className="font-mono text-white">{data.workdayStartUtc}</span>
+                    Expected start ({zoneLabel}):{" "}
+                    <span className="font-mono text-white">
+                      {formatWallHm12h(data.workdayStartUtc)}
+                    </span>
                   </li>
                 ) : null}
                 <li>
-                  Auto check-out time (UTC):{" "}
+                  Auto check-out time ({zoneLabel}):{" "}
                   <span className="font-mono text-white">
-                    {data.autoCheckoutUtc ?? "23:59"}
+                    {formatWallHm12h(data.autoCheckoutUtc ?? "23:59")}
                   </span>{" "}
                   — if you stay checked in past this time, the system may close your session
                   automatically.
@@ -164,7 +187,7 @@ export function EmployeeTodayActivity() {
               {data.checkIn ? (
                 <>
                   <p>
-                    Time: <span className="text-zinc-100">{fmtTime(data.checkIn.atMs)}</span>
+                    Time: <span className="text-zinc-100">{fmtTime(data.checkIn.atMs, displayTz)}</span>
                   </p>
                   {data.checkIn.photoUrl ? (
                     <div className="mt-2 overflow-hidden rounded-xl border border-white/10">
@@ -187,7 +210,10 @@ export function EmployeeTodayActivity() {
             <Card>
               <CardHeader>
                 <CardTitle className="text-base">Site switches today</CardTitle>
-                <CardDescription>Moves to another site during the same day (new selfie each time).</CardDescription>
+                <CardDescription>
+                  Each switch records <strong>check-out from the site you left</strong> and proof at the new
+                  site. Your <strong>end-of-day check-out</strong> is separate (Work → Check out).
+                </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
                 {data.siteSwitchLogs.map((log, i) => (
@@ -204,11 +230,26 @@ export function EmployeeTodayActivity() {
                         {log.toSiteName ?? log.toSiteId ?? "?"}
                       </span>
                     </p>
+                    {log.previousSiteCheckOut ? (
+                      <div className="mt-2 rounded-lg border border-amber-500/20 bg-amber-500/5 p-2 text-xs text-zinc-400">
+                        <p className="font-medium text-amber-200/90">
+                          Check-out from{" "}
+                          <span className="text-amber-100">
+                            {log.previousSiteCheckOut.siteName ?? log.previousSiteCheckOut.siteId ?? "?"}
+                          </span>{" "}
+                          (switch — not end of day)
+                        </p>
+                        <p className="mt-0.5">{fmtTime(log.previousSiteCheckOut.atMs ?? null, displayTz)}</p>
+                      </div>
+                    ) : null}
                     <p className="mt-1 text-xs text-zinc-500">
-                      {fmtTime(log.atMs ?? null)}
+                      Arrived at new site: {fmtTime(log.atMs ?? null, displayTz)}
                     </p>
                     {typeof log.photoUrl === "string" ? (
                       <div className="mt-2 overflow-hidden rounded-lg border border-white/10">
+                        <p className="mb-1 text-[10px] uppercase tracking-wide text-zinc-500">
+                          Proof at new site (also closes previous site segment)
+                        </p>
                         {/* eslint-disable-next-line @next/next/no-img-element */}
                         <img
                           src={log.photoUrl}
@@ -231,7 +272,7 @@ export function EmployeeTodayActivity() {
               {data.checkOut ? (
                 <>
                   <p>
-                    Time: <span className="text-zinc-100">{fmtTime(data.checkOut.atMs)}</span>
+                    Time: <span className="text-zinc-100">{fmtTime(data.checkOut.atMs, displayTz)}</span>
                     {data.checkOut.auto ? (
                       <span className="ml-2 rounded-md bg-amber-500/20 px-2 py-0.5 text-xs text-amber-200">
                         Automatic (end of day)
@@ -252,7 +293,7 @@ export function EmployeeTodayActivity() {
               ) : (
                 <p className="text-zinc-400">
                   Still checked in — use <strong>Work</strong> to check out, or wait for automatic
-                  check-out after the site&apos;s end time (UTC).
+                  check-out after the site&apos;s end time ({zoneLabel}).
                 </p>
               )}
             </CardContent>

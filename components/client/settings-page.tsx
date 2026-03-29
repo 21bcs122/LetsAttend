@@ -16,6 +16,7 @@ import { nameToInitials } from "@/lib/profile/initials";
 import { useDashboardUser } from "@/components/client/dashboard-user-context";
 import { cn } from "@/lib/utils";
 import { SettingsProfileEditor } from "@/components/client/settings-profile-editor";
+import { Skeleton } from "@/components/ui/skeleton";
 
 const DELETE_PHRASE = "DELETE MY ACCOUNT";
 
@@ -75,7 +76,14 @@ export function SettingsPage() {
             </CardHeader>
             <CardContent>
               {loading ? (
-                <p className="text-sm text-zinc-400">Loading…</p>
+                <div className="flex flex-wrap items-center gap-4" aria-hidden>
+                  <Skeleton className="size-16 shrink-0 rounded-2xl sm:size-[4.5rem]" />
+                  <div className="min-w-0 flex-1 space-y-2">
+                    <Skeleton className="h-5 w-40" />
+                    <Skeleton className="h-4 w-56" />
+                    <Skeleton className="h-3 w-24" />
+                  </div>
+                </div>
               ) : user ? (
                 <div className="flex flex-wrap items-center gap-4 sm:gap-6">
                   <span
