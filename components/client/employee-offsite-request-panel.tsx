@@ -157,10 +157,12 @@ export function EmployeeOffsiteRequestPanel() {
         </CardDescription>
       </CardHeader>
       <CardContent className="flex flex-col gap-4">
-        <label className="flex flex-col gap-1.5">
-          <span className={formFieldLabelClass}>Work date</span>
-          <DateField value={date} onChange={setDate} id="offsite-work-date" />
-        </label>
+        <DateField
+          label="Work date"
+          value={date}
+          onChange={setDate}
+          id="offsite-work-date"
+        />
 
         <div>
           <span className={cn("mb-1.5 block", formFieldLabelClass)}>Assignee (admin)</span>

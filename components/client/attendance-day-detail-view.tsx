@@ -103,17 +103,17 @@ function fmtDuration(ms: number | null | undefined) {
 }
 
 function overtimeStatusClass(status: string) {
-  if (status === "approved") return "text-emerald-400";
-  if (status === "rejected") return "text-red-400";
-  if (status === "pending") return "text-amber-300";
-  return "text-zinc-400";
+  if (status === "approved") return "text-emerald-700 dark:text-emerald-400";
+  if (status === "rejected") return "text-red-600 dark:text-red-400";
+  if (status === "pending") return "text-amber-700 dark:text-amber-300";
+  return "text-zinc-500 dark:text-zinc-400";
 }
 
 function offsiteStatusClass(status: string) {
-  if (status === "approved") return "text-emerald-400";
-  if (status === "rejected") return "text-red-400";
-  if (status === "pending") return "text-amber-300";
-  return "text-zinc-400";
+  if (status === "approved") return "text-emerald-700 dark:text-emerald-400";
+  if (status === "rejected") return "text-red-600 dark:text-red-400";
+  if (status === "pending") return "text-amber-700 dark:text-amber-300";
+  return "text-zinc-500 dark:text-zinc-400";
 }
 
 function OffsiteSection({
@@ -151,12 +151,12 @@ function OffsiteSection({
                 </span>
               </div>
               {r.reason ? (
-                <p className="mt-2 text-zinc-300">
+                <p className="mt-2 text-zinc-700 dark:text-zinc-300">
                   <span className="text-zinc-500">Reason: </span>
                   {r.reason}
                 </p>
               ) : null}
-              <p className="mt-1 text-zinc-200">
+              <p className="mt-1 text-zinc-900 dark:text-zinc-200">
                 <span className="text-zinc-500">Assignee: </span>
                 {r.assigneeAdminName ?? r.assigneeAdminEmail ?? r.assigneeAdminUid ?? "—"}
               </p>
@@ -164,7 +164,9 @@ function OffsiteSection({
                 Window: {formatWallHm12h(start)} → {formatWallHm12h(end)} ({z})
               </p>
               {r.durationMs != null && r.durationMs >= 0 ? (
-                <p className="mt-1 text-xs text-sky-200/90">Duration: {fmtDuration(r.durationMs)}</p>
+                <p className="mt-1 text-xs text-sky-800 dark:text-sky-200/90">
+                  Duration: {fmtDuration(r.durationMs)}
+                </p>
               ) : null}
               {r.requestGps ? (
                 <p className="mt-1 text-xs text-zinc-500">
@@ -221,9 +223,9 @@ function DayHoursSummary({
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-2 text-sm">
-        <div className="flex flex-wrap justify-between gap-2 border-b border-white/10 pb-2">
-          <span className="text-zinc-400">Regular (sites until check-out)</span>
-          <span className="font-mono text-emerald-200/90">
+        <div className="flex flex-wrap justify-between gap-2 border-b border-zinc-200/80 pb-2 dark:border-white/10">
+          <span className="text-zinc-600 dark:text-zinc-400">Regular (sites until check-out)</span>
+          <span className="font-mono text-emerald-800 dark:text-emerald-200/90">
             {regularMs > 0 || !data.absent ? (
               <>
                 {fmtDuration(regularMs)}
@@ -234,21 +236,21 @@ function DayHoursSummary({
             )}
           </span>
         </div>
-        <div className="flex flex-wrap justify-between gap-2 border-b border-white/10 pb-2">
-          <span className="text-zinc-400">Approved overtime</span>
-          <span className="font-mono text-amber-200/90">
+        <div className="flex flex-wrap justify-between gap-2 border-b border-zinc-200/80 pb-2 dark:border-white/10">
+          <span className="text-zinc-600 dark:text-zinc-400">Approved overtime</span>
+          <span className="font-mono text-amber-800 dark:text-amber-200/90">
             {overtimeMs > 0 ? fmtDuration(overtimeMs) : "—"}
           </span>
         </div>
-        <div className="flex flex-wrap justify-between gap-2 border-b border-white/10 pb-2">
-          <span className="text-zinc-400">Approved off-site</span>
-          <span className="font-mono text-sky-200/90">
+        <div className="flex flex-wrap justify-between gap-2 border-b border-zinc-200/80 pb-2 dark:border-white/10">
+          <span className="text-zinc-600 dark:text-zinc-400">Approved off-site</span>
+          <span className="font-mono text-sky-800 dark:text-sky-200/90">
             {offsiteMs > 0 ? fmtDuration(offsiteMs) : "—"}
           </span>
         </div>
         <div className="flex flex-wrap justify-between gap-2 pt-1">
-          <span className="font-medium text-zinc-200">Total credited hours</span>
-          <span className="font-mono text-lg font-semibold text-emerald-100">
+          <span className="font-medium text-zinc-900 dark:text-zinc-200">Total credited hours</span>
+          <span className="font-mono text-lg font-semibold text-emerald-900 dark:text-emerald-100">
             {totalMs > 0 ? fmtDuration(totalMs) : "—"}
           </span>
         </div>
@@ -293,21 +295,23 @@ function OvertimeSection({
                 </span>
               </div>
               {r.reason ? (
-                <p className="mt-2 text-zinc-300">
+                <p className="mt-2 text-zinc-700 dark:text-zinc-300">
                   <span className="text-zinc-500">Reason: </span>
                   {r.reason}
                 </p>
               ) : null}
-              <p className="mt-1 text-zinc-200">
+              <p className="mt-1 text-zinc-900 dark:text-zinc-200">
                 <span className="text-zinc-500">Site: </span>
                 {r.siteName ?? (r.siteId ?? "—")}
               </p>
               {spanMs != null && spanMs >= 0 ? (
-                <p className="mt-1 text-xs text-amber-200/90">Overtime duration: {fmtDuration(spanMs)}</p>
+                <p className="mt-1 text-xs text-amber-800 dark:text-amber-200/90">
+                  Overtime duration: {fmtDuration(spanMs)}
+                </p>
               ) : null}
               <div className="mt-3 grid gap-3 sm:grid-cols-2">
                 <div>
-                  <p className="text-xs font-medium uppercase tracking-wide text-amber-400/90">
+                  <p className="text-xs font-medium uppercase tracking-wide text-amber-800 dark:text-amber-400/90">
                     OT check-in
                   </p>
                   <p className="font-mono text-xs text-zinc-500">
@@ -323,7 +327,7 @@ function OvertimeSection({
                   ) : null}
                 </div>
                 <div>
-                  <p className="text-xs font-medium uppercase tracking-wide text-amber-400/90">
+                  <p className="text-xs font-medium uppercase tracking-wide text-amber-800 dark:text-amber-400/90">
                     OT check-out
                   </p>
                   <p className="font-mono text-xs text-zinc-500">
@@ -389,11 +393,11 @@ export function AttendanceDayDetailView({
           <div>
             <h1 className="text-2xl font-semibold tracking-tight">Day timeline</h1>
             <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
-              <span className="font-mono text-zinc-300">{data.day}</span>
+              <span className="font-mono text-zinc-800 dark:text-zinc-300">{data.day}</span>
               {data.workerName ? (
                 <>
                   {" "}
-                  · <span className="text-zinc-200">{data.workerName}</span>
+                  · <span className="text-zinc-900 dark:text-zinc-200">{data.workerName}</span>
                 </>
               ) : null}
               {data.workerEmail ? (
@@ -406,7 +410,7 @@ export function AttendanceDayDetailView({
             <h1 className="text-2xl font-semibold tracking-tight">Day detail</h1>
             <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
               Calendar day ({zoneLabel}):{" "}
-              <span className="font-mono text-zinc-300">{data.day}</span>
+              <span className="font-mono text-zinc-800 dark:text-zinc-300">{data.day}</span>
             </p>
           </div>
         )}
@@ -437,11 +441,11 @@ export function AttendanceDayDetailView({
                 <CardTitle className="text-sm font-medium text-zinc-400">Day status</CardTitle>
               </CardHeader>
               <CardContent>
-                <p className="text-lg font-semibold text-zinc-100">
+                <p className="text-lg font-semibold text-zinc-900 dark:text-zinc-100">
                   {data.analytics.sessionOpen ? (
-                    <span className="text-emerald-400">Session open</span>
+                    <span className="text-emerald-700 dark:text-emerald-400">Session open</span>
                   ) : (
-                    <span className="text-zinc-200">Completed</span>
+                    <span className="text-zinc-800 dark:text-zinc-200">Completed</span>
                   )}
                 </p>
                 <p className="mt-1 text-xs text-zinc-500 capitalize">Record: {data.status}</p>
@@ -452,7 +456,7 @@ export function AttendanceDayDetailView({
                 <CardTitle className="text-sm font-medium text-zinc-400">Active site (now)</CardTitle>
               </CardHeader>
               <CardContent>
-                <p className="text-lg font-semibold text-zinc-100">
+                <p className="text-lg font-semibold text-zinc-900 dark:text-zinc-100">
                   {data.currentSiteName ?? "—"}
                 </p>
                 {data.currentSiteId ? (
@@ -465,7 +469,7 @@ export function AttendanceDayDetailView({
                 <CardTitle className="text-sm font-medium text-zinc-400">Sites visited</CardTitle>
               </CardHeader>
               <CardContent>
-                <p className="text-lg font-semibold text-cyan-300">
+                <p className="text-lg font-semibold text-cyan-800 dark:text-cyan-300">
                   {data.analytics.uniqueSitesCount}
                 </p>
                 <p className="mt-1 text-xs text-zinc-500">Unique locations this day</p>
@@ -476,7 +480,7 @@ export function AttendanceDayDetailView({
                 <CardTitle className="text-sm font-medium text-zinc-400">Session span</CardTitle>
               </CardHeader>
               <CardContent>
-                <p className="text-lg font-semibold text-zinc-100">
+                <p className="text-lg font-semibold text-zinc-900 dark:text-zinc-100">
                   {fmtDuration(data.analytics.totalSessionMs)}
                 </p>
                 <p className="mt-1 text-xs text-zinc-500">
@@ -504,13 +508,13 @@ export function AttendanceDayDetailView({
                       className="flex flex-wrap items-baseline justify-between gap-2 rounded-xl border border-zinc-200/80 bg-zinc-50/90 px-3 py-2 text-sm dark:border-white/10 dark:bg-white/[0.02]"
                     >
                       <div>
-                        <p className="font-medium text-zinc-100">{seg.siteName}</p>
+                        <p className="font-medium text-zinc-900 dark:text-zinc-100">{seg.siteName}</p>
                         <p className="text-xs text-zinc-500">
                           {fmtLocal(seg.startMs, displayTz)}
                           {seg.endMs != null ? ` → ${fmtLocal(seg.endMs, displayTz)}` : " → …"}
                         </p>
                       </div>
-                      <p className="font-mono text-cyan-300/90">
+                      <p className="font-mono text-cyan-800 dark:text-cyan-300/90">
                         {seg.durationMs != null ? fmtDuration(seg.durationMs) : "In progress"}
                       </p>
                     </li>
@@ -532,16 +536,16 @@ export function AttendanceDayDetailView({
               </CardDescription>
             </CardHeader>
             <CardContent>
-              <ol className="relative space-y-0 border-l border-white/15 pl-6">
+              <ol className="relative space-y-0 border-l border-zinc-300 pl-6 dark:border-white/15">
                 {data.timeline.map((ev, idx) => (
                   <li key={idx} className="mb-6 ml-1 last:mb-0">
-                    <span className="absolute -left-1.5 mt-1.5 size-3 rounded-full border-2 border-violet-500 bg-zinc-950" />
+                    <span className="absolute -left-1.5 mt-1.5 size-3 rounded-full border-2 border-violet-500 bg-white dark:bg-zinc-950" />
                     {ev.kind === "check_in" ? (
                       <div className="space-y-2">
-                        <p className="text-xs font-semibold uppercase tracking-wide text-emerald-400/90">
+                        <p className="text-xs font-semibold uppercase tracking-wide text-emerald-700 dark:text-emerald-400/90">
                           Check-in
                         </p>
-                        <p className="text-sm text-zinc-200">
+                        <p className="text-sm text-zinc-900 dark:text-zinc-200">
                           <strong>{String((ev as { siteName?: string }).siteName ?? "?")}</strong>
                         </p>
                         <p className="font-mono text-xs text-zinc-500">{fmtLocal(ev.atMs, displayTz)}</p>
@@ -556,22 +560,22 @@ export function AttendanceDayDetailView({
                       </div>
                     ) : ev.kind === "site_switch" ? (
                       <div className="space-y-2">
-                        <p className="text-xs font-semibold uppercase tracking-wide text-cyan-400/90">
+                        <p className="text-xs font-semibold uppercase tracking-wide text-cyan-800 dark:text-cyan-400/90">
                           Site switch
                         </p>
-                        <p className="text-sm text-zinc-200">
-                          <span className="text-cyan-300">
+                        <p className="text-sm text-zinc-900 dark:text-zinc-200">
+                          <span className="text-cyan-800 dark:text-cyan-300">
                             {(ev as { fromSiteName?: string }).fromSiteName}
                           </span>
                           {" → "}
-                          <span className="text-emerald-300">
+                          <span className="text-emerald-800 dark:text-emerald-300">
                             {(ev as { toSiteName?: string }).toSiteName}
                           </span>
                         </p>
                         <p className="font-mono text-xs text-zinc-500">{fmtLocal(ev.atMs, displayTz)}</p>
                         {(ev as { previousSiteCheckOut?: { siteName?: string } | null })
                           .previousSiteCheckOut ? (
-                          <p className="text-xs text-amber-200/80">
+                          <p className="text-xs text-amber-900 dark:text-amber-200/80">
                             Segment check-out from{" "}
                             <strong>
                               {
@@ -596,10 +600,10 @@ export function AttendanceDayDetailView({
                       </div>
                     ) : (
                       <div className="space-y-2">
-                        <p className="text-xs font-semibold uppercase tracking-wide text-zinc-400">
+                        <p className="text-xs font-semibold uppercase tracking-wide text-zinc-600 dark:text-zinc-400">
                           Check-out {(ev as { auto?: boolean }).auto ? "(automatic)" : ""}
                         </p>
-                        <p className="text-sm text-zinc-200">
+                        <p className="text-sm text-zinc-900 dark:text-zinc-200">
                           <strong>{String((ev as { siteName?: string }).siteName ?? "?")}</strong> — end
                           of day
                         </p>
@@ -628,14 +632,14 @@ export function AttendanceDayDetailView({
             <CardContent className="grid gap-3 text-sm sm:grid-cols-2">
               <div>
                 <dt className="text-zinc-500">First check-in (site)</dt>
-                <dd className={cn("font-medium text-zinc-100")}>
+                <dd className={cn("font-medium text-zinc-900 dark:text-zinc-100")}>
                   {data.checkIn?.siteName ?? "—"}
                 </dd>
                 <dd className="font-mono text-xs text-zinc-500">{fmtLocal(data.checkIn?.atMs, displayTz)}</dd>
               </div>
               <div>
                 <dt className="text-zinc-500">Final check-out</dt>
-                <dd className="font-medium text-zinc-100">
+                <dd className="font-medium text-zinc-900 dark:text-zinc-100">
                   {data.checkOut ? (
                     <>
                       {data.checkOut.siteName}

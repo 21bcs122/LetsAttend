@@ -2,6 +2,7 @@
 
 import * as React from "react";
 import { Button } from "@/components/ui/button";
+import { formFieldLabelClass } from "@/components/ui/input";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import { EmployeeCustomSiteModal } from "@/components/client/employee-custom-site-modal";
 
@@ -35,7 +36,8 @@ export function SiteSelectWithCustomRow({
   onRefreshSites,
   blankOptionLabel = "Select…",
   selectId,
-  selectClassName = "rounded-xl border border-white/10 bg-black/40 px-3 py-2 text-foreground",
+  selectClassName =
+    "rounded-xl border border-zinc-200/90 bg-white px-3 py-2 text-zinc-900 dark:border-white/10 dark:bg-black/40 dark:text-foreground",
   showCustomSiteButton = true,
   selectDisabled = false,
 }: Props) {
@@ -45,7 +47,7 @@ export function SiteSelectWithCustomRow({
     <>
       <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:gap-2">
         <label className="flex min-w-0 flex-1 flex-col gap-2 text-sm">
-          <span className="text-zinc-400">{label}</span>
+          <span className={formFieldLabelClass}>{label}</span>
           <SearchableSelect
             id={selectId}
             value={value}

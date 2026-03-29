@@ -83,9 +83,9 @@ function AttendanceLine({
   displayTimeZone: string;
 }) {
   return (
-    <div className="text-xs leading-relaxed text-zinc-300">
+    <div className="text-xs leading-relaxed text-zinc-700 dark:text-zinc-300">
       <span className="text-zinc-500">{kind}: </span>
-      <span className="font-mono text-zinc-200">{fmtTs(ts, displayTimeZone)}</span>
+      <span className="font-mono text-zinc-900 dark:text-zinc-200">{fmtTs(ts, displayTimeZone)}</span>
       <span className="text-zinc-500"> · GPS {fmtGps(gps)}</span>
       {photoUrl ? (
         <>
@@ -236,11 +236,11 @@ export function EmployeeOvertimeRequestPanel() {
           {busy ? "Sending…" : "Submit overtime request"}
         </Button>
         {requests.length > 0 ? (
-          <div className="space-y-4 rounded-xl border border-white/10 bg-white/[0.02] p-3">
-            <p className="text-xs font-medium uppercase tracking-wide text-zinc-500">
+          <div className="space-y-4 rounded-xl border border-zinc-200/80 bg-zinc-50/90 p-3 dark:border-white/10 dark:bg-white/[0.02]">
+            <p className="text-xs font-medium uppercase tracking-wide text-zinc-600 dark:text-zinc-500">
               Your recent requests &amp; overtime attendance
             </p>
-            <ul className="space-y-6 text-sm text-zinc-300">
+            <ul className="space-y-6 text-sm text-zinc-800 dark:text-zinc-300">
               {requests.slice(0, 12).map((r) => {
                 const todayKey = calendarDateKeyInTimeZone(new Date(), displayTz);
                 const rowDate = normalizeWorkDateKey(r.date, displayTz);
@@ -257,11 +257,13 @@ export function EmployeeOvertimeRequestPanel() {
                 return (
                   <li
                     key={r.id}
-                    className="space-y-3 border-b border-white/5 pb-4 last:border-0 last:pb-0"
+                    className="space-y-3 border-b border-zinc-200/70 pb-4 last:border-0 last:pb-0 dark:border-white/5"
                   >
                     <div className="flex flex-wrap items-start justify-between gap-2">
                       <div>
-                        <p className="font-medium text-zinc-100">{rowDate || r.date || "—"}</p>
+                        <p className="font-medium text-zinc-900 dark:text-zinc-100">
+                          {rowDate || r.date || "—"}
+                        </p>
                         <p className="text-xs text-zinc-500">Work date</p>
                         <p className="text-xs text-zinc-500">
                           Site: {siteLabel(typeof r.siteId === "string" ? r.siteId : null)}
@@ -270,20 +272,20 @@ export function EmployeeOvertimeRequestPanel() {
                       <span
                         className={
                           r.status === "approved"
-                            ? "text-emerald-400"
+                            ? "text-emerald-700 dark:text-emerald-400"
                             : r.status === "rejected"
-                              ? "text-red-400"
-                              : "text-amber-200"
+                              ? "text-red-600 dark:text-red-400"
+                              : "text-amber-800 dark:text-amber-200"
                         }
                       >
                         {r.status ?? "pending"}
                       </span>
                     </div>
-                    {r.reason ? <p className="text-zinc-400">{r.reason}</p> : null}
+                    {r.reason ? <p className="text-zinc-600 dark:text-zinc-400">{r.reason}</p> : null}
 
                     {r.status === "approved" ? (
                       <div className="space-y-4 rounded-xl border border-violet-500/20 bg-violet-500/[0.04] p-4">
-                        <p className="text-xs font-medium uppercase tracking-wide text-violet-200/90">
+                        <p className="text-xs font-medium uppercase tracking-wide text-violet-900 dark:text-violet-200/90">
                           Overtime attendance
                         </p>
 
@@ -328,7 +330,7 @@ export function EmployeeOvertimeRequestPanel() {
 
                         {/* Step 2 — check-out (only after check-in, until recorded) */}
                         {hasIn && !hasOut ? (
-                          <div className="space-y-2 border-t border-white/10 pt-4">
+                          <div className="space-y-2 border-t border-zinc-200/80 pt-4 dark:border-white/10">
                             <p className="text-xs text-zinc-500">
                               Step 2 — When you finish overtime work, check out (GPS + selfie at the site).
                             </p>
@@ -364,7 +366,7 @@ export function EmployeeOvertimeRequestPanel() {
                         ) : null}
 
                         {hasIn && hasOut ? (
-                          <p className="border-t border-white/10 pt-3 text-sm font-medium text-emerald-400/95">
+                          <p className="border-t border-zinc-200/80 pt-3 text-sm font-medium text-emerald-800 dark:border-white/10 dark:text-emerald-400/95">
                             Overtime session complete.
                           </p>
                         ) : null}

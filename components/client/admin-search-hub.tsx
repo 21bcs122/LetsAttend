@@ -186,7 +186,7 @@ export function AdminSearchHub() {
                             type="button"
                             size="sm"
                             variant="ghost"
-                            className="h-8 text-xs text-cyan-400 hover:text-cyan-300"
+                            className="h-8 text-xs text-cyan-700 hover:text-cyan-800 dark:text-cyan-400 dark:hover:text-cyan-300"
                             onClick={(e) => {
                               e.stopPropagation();
                               setWorkerModal(r);
@@ -243,7 +243,7 @@ export function AdminSearchHub() {
                         className="flex w-full flex-col items-start rounded-lg px-3 py-2 text-left text-sm text-zinc-900 transition-colors hover:bg-zinc-100 dark:text-inherit dark:hover:bg-white/10"
                         onClick={() => setSiteModal(s)}
                       >
-                        <span className="font-medium text-zinc-100">
+                        <span className="font-medium text-zinc-900 dark:text-zinc-100">
                           {typeof s.name === "string" && s.name.trim() ? s.name : s.id}
                         </span>
                         <span className="font-mono text-[10px] text-zinc-500">{s.id}</span>
@@ -327,7 +327,7 @@ export function AdminSearchHub() {
               <Button
                 type="button"
                 onClick={() => {
-                  router.push(`/dashboard/admin/sites?site=${encodeURIComponent(siteModal.id)}`);
+                  router.push(`/dashboard/admin/sites/${encodeURIComponent(siteModal.id)}`);
                   setSiteModal(null);
                 }}
               >

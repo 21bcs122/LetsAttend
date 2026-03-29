@@ -264,7 +264,7 @@ export default function AdminOvertimePage() {
           description={
             <>
               <p>
-                Move this request back to <strong className="text-zinc-200">pending</strong>? Recorded
+                Move this request back to <strong>pending</strong>? Recorded
                 overtime check-in and check-out on this row will be cleared.
               </p>
             </>
@@ -319,7 +319,8 @@ export default function AdminOvertimePage() {
         <h1 className="text-2xl font-semibold tracking-tight">Overtime</h1>
         <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
           Approve or reject, unapprove back to pending (clears overtime GPS), or delete. Employees record
-          overtime on <strong className="text-zinc-300">Employee → Overtime</strong> after approval.
+          overtime on{" "}
+          <strong className="text-zinc-900 dark:text-zinc-300">Employee → Overtime</strong> after approval.
         </p>
       </div>
 
@@ -353,7 +354,7 @@ export default function AdminOvertimePage() {
                 <Skeleton className="h-24 rounded-xl" />
               </div>
             ) : items.length === 0 ? (
-              <p className="text-sm text-zinc-400">No requests.</p>
+              <p className="text-sm text-zinc-600 dark:text-zinc-400">No requests.</p>
             ) : (
               <ul className="space-y-4">
                 {items.map((r) => {
@@ -370,11 +371,11 @@ export default function AdminOvertimePage() {
                   return (
                     <li
                       key={r.id}
-                      className="rounded-xl border border-white/10 bg-white/[0.02] p-4 text-sm"
+                      className="rounded-xl border border-zinc-200/80 bg-zinc-50/90 p-4 text-sm dark:border-white/10 dark:bg-white/[0.02]"
                     >
                       <div className="flex flex-wrap items-start justify-between gap-2">
                         <div>
-                          <p className="font-medium text-zinc-100">
+                          <p className="font-medium text-zinc-900 dark:text-zinc-100">
                             {r.workerName ?? r.workerEmail ?? r.workerId ?? "Worker"}
                           </p>
                           <p className="text-xs text-zinc-500">
@@ -384,16 +385,16 @@ export default function AdminOvertimePage() {
                         <span
                           className={
                             r.status === "approved"
-                              ? "text-emerald-400"
+                              ? "text-emerald-700 dark:text-emerald-400"
                               : r.status === "rejected"
-                                ? "text-red-400"
-                                : "text-amber-200"
+                                ? "text-red-600 dark:text-red-400"
+                                : "text-amber-800 dark:text-amber-200"
                           }
                         >
                           {r.status ?? "pending"}
                         </span>
                       </div>
-                      <dl className="mt-3 grid gap-1 text-xs text-zinc-400">
+                      <dl className="mt-3 grid gap-1 text-xs text-zinc-600 dark:text-zinc-400">
                         <div>
                           <span className="text-zinc-500">Work date: </span>
                           {r.date ?? "—"}
@@ -417,13 +418,15 @@ export default function AdminOvertimePage() {
                           </div>
                         ) : null}
                       </dl>
-                      <p className="mt-2 text-zinc-300">{r.reason ?? "—"}</p>
+                      <p className="mt-2 text-zinc-800 dark:text-zinc-300">{r.reason ?? "—"}</p>
 
                       {r.status === "approved" ? (
-                        <div className="mt-3 space-y-2 rounded-lg border border-violet-500/20 bg-violet-500/[0.04] p-3 text-xs">
-                          <p className="font-medium text-violet-200/90">Overtime attendance</p>
+                        <div className="mt-3 space-y-2 rounded-lg border border-violet-500/25 bg-violet-500/[0.06] p-3 text-xs dark:border-violet-500/20 dark:bg-violet-500/[0.04]">
+                          <p className="font-medium text-violet-900 dark:text-violet-200/90">
+                            Overtime attendance
+                          </p>
                           {hasIn ? (
-                            <div className="text-zinc-400">
+                            <div className="text-zinc-600 dark:text-zinc-400">
                               <span className="text-zinc-500">Check-in: </span>
                               {fmt(inTs)}{" "}
                               <span className="text-zinc-600">
@@ -445,10 +448,10 @@ export default function AdminOvertimePage() {
                               ) : null}
                             </div>
                           ) : (
-                            <p className="text-amber-200/80">No overtime check-in yet.</p>
+                            <p className="text-amber-900 dark:text-amber-200/80">No overtime check-in yet.</p>
                           )}
                           {hasOut ? (
-                            <div className="text-zinc-400">
+                            <div className="text-zinc-600 dark:text-zinc-400">
                               <span className="text-zinc-500">Check-out: </span>
                               {fmt(outTs)}{" "}
                               <span className="text-zinc-600">
@@ -470,7 +473,7 @@ export default function AdminOvertimePage() {
                               ) : null}
                             </div>
                           ) : hasIn ? (
-                            <p className="text-amber-200/80">Awaiting check-out.</p>
+                            <p className="text-amber-900 dark:text-amber-200/80">Awaiting check-out.</p>
                           ) : null}
                         </div>
                       ) : null}
@@ -493,7 +496,7 @@ export default function AdminOvertimePage() {
                               }))}
                               emptyLabel="Select site…"
                               searchPlaceholder="Search sites…"
-                              triggerClassName="rounded-lg border border-white/10 bg-black/40 px-3 py-2 text-sm text-foreground"
+                              triggerClassName="rounded-lg border border-zinc-200/90 bg-white px-3 py-2 text-sm text-zinc-900 dark:border-white/10 dark:bg-black/40 dark:text-foreground"
                               listClassName="max-h-[min(280px,50vh)]"
                             />
                           </label>

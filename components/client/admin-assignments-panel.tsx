@@ -178,8 +178,8 @@ export function AdminAssignmentsPanel() {
           description={
             <>
               <p>
-                Remove <strong className="text-zinc-200">{siteName(confirmRemove.siteId)}</strong> from{" "}
-                <strong className="text-zinc-200">{confirmRemove.worker.name || confirmRemove.worker.email}</strong>?
+                Remove <strong>{siteName(confirmRemove.siteId)}</strong> from{" "}
+                <strong>{confirmRemove.worker.name || confirmRemove.worker.email}</strong>?
                 They will be notified. If this was their last site, they cannot check in until you assign
                 another.
               </p>
@@ -210,7 +210,7 @@ export function AdminAssignmentsPanel() {
             <>
               <p>
                 Remove every site assignment for{" "}
-                <strong className="text-zinc-200">{confirmClear.name || confirmClear.email || confirmClear.id}</strong>?
+                <strong>{confirmClear.name || confirmClear.email || confirmClear.id}</strong>?
                 They will not be able to check in until you assign sites again. They will be notified.
               </p>
             </>
@@ -246,7 +246,8 @@ export function AdminAssignmentsPanel() {
             <CardTitle>Who has what</CardTitle>
             <CardDescription>
               Remove individual sites or clear all for a worker (they get a notification on save). Use
-              <strong className="mx-1 text-zinc-400">Add assignment</strong> for the same site picker as on
+              <strong className="mx-1 text-zinc-800 dark:text-zinc-400">Add assignment</strong> for the same
+              site picker as on
               Workers → Assign. Open Work lists every site they have; Go to Work / Assigned focus on these
               sites.
             </CardDescription>
@@ -266,8 +267,8 @@ export function AdminAssignmentsPanel() {
         </CardHeader>
         <CardContent className="space-y-4">
           {addAssignExpanded ? (
-            <div className="rounded-xl border border-white/10 bg-white/[0.02] p-4">
-              <p className="text-sm font-medium text-zinc-200">Assign sites to an employee</p>
+            <div className="rounded-xl border border-zinc-200/90 bg-zinc-50/90 p-4 dark:border-white/10 dark:bg-white/[0.02]">
+              <p className="text-sm font-medium text-zinc-900 dark:text-zinc-200">Assign sites to an employee</p>
               <p className="mt-1 text-xs text-zinc-500">
                 Same checklist as the Workers table — tick sites and save; the worker is notified.
               </p>
@@ -282,7 +283,7 @@ export function AdminAssignmentsPanel() {
                   }))}
                   emptyLabel="— Select employee —"
                   searchPlaceholder="Search employees…"
-                  triggerClassName="mt-1 h-10 w-full rounded-xl border border-white/10 bg-black/40 px-3 text-sm"
+                  triggerClassName="mt-1 h-10 w-full rounded-xl border border-zinc-200/90 bg-white px-3 text-sm text-zinc-900 dark:border-white/10 dark:bg-black/40 dark:text-zinc-100"
                   popoverContentClassName="z-[1400]"
                   listClassName="max-h-[min(280px,50vh)]"
                 />
@@ -303,9 +304,9 @@ export function AdminAssignmentsPanel() {
                 <th className="pb-3 w-28 font-medium text-right">Actions</th>
               </tr>
             </thead>
-            <tbody className="text-zinc-300">
+            <tbody className="text-zinc-800 dark:text-zinc-300">
               {employees.map((w) => (
-                <tr key={w.id} className="border-b border-white/5 align-top">
+                <tr key={w.id} className="border-b border-zinc-200/60 align-top dark:border-white/5">
                   <td className="py-3 pr-4">
                     <Link
                       href={`/dashboard/admin/workers/${encodeURIComponent(w.id)}/attendance/${encodeURIComponent(new Date().toISOString().slice(0, 10))}`}
@@ -317,16 +318,16 @@ export function AdminAssignmentsPanel() {
                   <td className="py-3 pr-4 text-zinc-500">{w.email || "—"}</td>
                   <td className="py-3 pr-4">
                     {w.assignedSites.length === 0 ? (
-                      <span className="text-amber-200/80">None — cannot check in</span>
+                      <span className="text-amber-900 dark:text-amber-200/80">None — cannot check in</span>
                     ) : (
                       <ul className="max-w-xl space-y-2 text-xs sm:text-sm">
                         {w.assignedSites.map((sid) => (
                             <li
                               key={sid}
-                              className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-white/5 bg-white/[0.02] px-2 py-1.5"
+                              className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-zinc-200/60 bg-white/80 px-2 py-1.5 dark:border-white/5 dark:bg-white/[0.02]"
                             >
                               <span>
-                                <span className="text-zinc-200">{siteName(sid)}</span>{" "}
+                                <span className="text-zinc-900 dark:text-zinc-200">{siteName(sid)}</span>{" "}
                                 <span className="font-mono text-zinc-500">({sid})</span>
                               </span>
                               <Button

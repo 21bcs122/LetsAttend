@@ -200,7 +200,7 @@ export function AttendanceCalendar({
             >
               <ChevronLeft className="size-4" />
             </button>
-            <span className="min-w-[140px] text-center text-sm font-medium">
+            <span className="min-w-[140px] text-center text-sm font-medium text-zinc-900 dark:text-zinc-100">
               {label}
             </span>
             <button

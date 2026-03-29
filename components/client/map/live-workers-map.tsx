@@ -166,14 +166,16 @@ function MapJumpToolbar({
   const showFab = !panelOpen;
 
   const selectTriggerClass = cn(
-    "w-full rounded-md border border-white/10 bg-black/50 text-zinc-200",
+    "w-full rounded-md border border-zinc-200/90 bg-white text-zinc-900",
+    "dark:border-white/10 dark:bg-black/50 dark:text-zinc-200",
     narrowScreen
       ? "h-8 px-2 py-1 text-[11px] leading-tight"
       : "h-9 rounded-lg px-2 py-1.5 text-xs"
   );
 
   const cardClassName = cn(
-    "pointer-events-auto absolute right-3 top-14 z-[1001] flex flex-col border border-white/15 bg-zinc-950/95 shadow-lg backdrop-blur-sm",
+    "pointer-events-auto absolute right-3 top-14 z-[1001] flex flex-col border border-zinc-200/90 bg-white/95 shadow-lg backdrop-blur-sm",
+    "dark:border-white/15 dark:bg-zinc-950/95",
     narrowScreen
       ? "w-[min(188px,calc(100vw-1.5rem))] max-h-[min(200px,34vh)] gap-1 overflow-y-auto rounded-lg p-1.5"
       : "w-[min(220px,calc(100%-24px))] max-h-[min(300px,50vh)] gap-2 overflow-y-auto rounded-xl p-2.5 text-xs"
@@ -184,7 +186,7 @@ function MapJumpToolbar({
       {showFab ? (
         <button
           type="button"
-          className="pointer-events-auto absolute right-3 top-14 z-[1000] flex size-10 items-center justify-center rounded-lg border border-white/15 bg-zinc-950/92 text-cyan-100 shadow-lg backdrop-blur-sm transition-colors hover:bg-zinc-900/95 md:size-11 md:rounded-xl"
+          className="pointer-events-auto absolute right-3 top-14 z-[1000] flex size-10 items-center justify-center rounded-lg border border-zinc-200/90 bg-white text-cyan-800 shadow-lg backdrop-blur-sm transition-colors hover:bg-zinc-50 md:size-11 md:rounded-xl dark:border-white/15 dark:bg-zinc-950/92 dark:text-cyan-100 dark:hover:bg-zinc-900/95"
           aria-expanded={false}
           aria-controls="live-map-jump-panel"
           onClick={() => onPanelOpenChange(true)}
@@ -200,10 +202,10 @@ function MapJumpToolbar({
           aria-label="Jump to worker or site"
           className={cardClassName}
         >
-          <div className="flex shrink-0 items-center justify-between gap-1.5 border-b border-white/10 pb-1.5">
+          <div className="flex shrink-0 items-center justify-between gap-1.5 border-b border-zinc-200/80 pb-1.5 dark:border-white/10">
             <span
               className={cn(
-                "font-semibold uppercase tracking-wide text-zinc-400",
+                "font-semibold uppercase tracking-wide text-zinc-600 dark:text-zinc-400",
                 narrowScreen ? "text-[9px]" : "text-[11px]"
               )}
             >
@@ -212,7 +214,7 @@ function MapJumpToolbar({
             <button
               type="button"
               className={cn(
-                "rounded-md text-zinc-400 transition-colors hover:bg-white/10 hover:text-zinc-100",
+                "rounded-md text-zinc-500 transition-colors hover:bg-zinc-100 hover:text-zinc-900 dark:text-zinc-400 dark:hover:bg-white/10 dark:hover:text-zinc-100",
                 narrowScreen ? "p-0.5" : "p-1"
               )}
               aria-label="Close panel"
@@ -224,7 +226,7 @@ function MapJumpToolbar({
           <div>
             <label
               className={cn(
-                "mb-0.5 block font-medium uppercase tracking-wide text-zinc-500",
+                "mb-0.5 block font-medium uppercase tracking-wide text-zinc-600 dark:text-zinc-500",
                 narrowScreen ? "text-[9px]" : "text-[10px]"
               )}
             >
@@ -288,7 +290,7 @@ function MapJumpToolbar({
             <div>
               <label
                 className={cn(
-                  "mb-0.5 block font-medium uppercase tracking-wide text-zinc-500",
+                  "mb-0.5 block font-medium uppercase tracking-wide text-zinc-600 dark:text-zinc-500",
                   narrowScreen ? "text-[9px]" : "text-[10px]"
                 )}
               >
@@ -317,7 +319,7 @@ function MapJumpToolbar({
           ) : null}
           <p
             className={cn(
-              "leading-snug text-zinc-500",
+              "leading-snug text-zinc-600 dark:text-zinc-500",
               narrowScreen ? "hidden" : "text-[10px]"
             )}
           >
@@ -486,11 +488,12 @@ function LiveWorkersMapInner({
   return (
     <div
       className={cn(
-        "relative bg-black/20",
-        rounded && "overflow-hidden rounded-2xl border border-white/10"
+        "relative bg-zinc-100/80 dark:bg-black/20",
+        rounded &&
+          "overflow-hidden rounded-2xl border border-zinc-200/90 dark:border-white/10"
       )}
     >
-      <div className="px-4 py-3 text-sm text-zinc-300">
+      <div className="px-4 py-3 text-sm text-zinc-800 dark:text-zinc-300">
         {siteId ? (
           <>
             Live GPS in this site&apos;s area {loading ? "…" : ""} — blue: last
@@ -516,7 +519,7 @@ function LiveWorkersMapInner({
         >
           <InvalidateSizeOn when={resizeSignal} />
           <BasemapTileLayer basemap={basemap} />
-          <BasemapLayerControl value={basemap} onChange={setBasemap} />
+          <BasemapLayerControl tone="light" value={basemap} onChange={setBasemap} />
           <MapJumpToolbar
             points={points}
             offsitePins={offsitePins}

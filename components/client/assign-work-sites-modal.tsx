@@ -137,32 +137,35 @@ export function AssignWorkSitesModal({ worker, open, onOpenChange, onSaved }: Pr
       onClick={() => onOpenChange(false)}
     >
       <div
-        className="relative max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-2xl border border-white/10 bg-zinc-950 p-5 shadow-2xl"
+        className="relative max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-2xl border border-zinc-200/90 bg-white p-5 shadow-2xl dark:border-white/10 dark:bg-zinc-950"
         onClick={(e) => e.stopPropagation()}
       >
         <button
           type="button"
-          className="absolute right-3 top-3 rounded-lg p-1.5 text-zinc-400 hover:bg-white/10 hover:text-zinc-100"
+          className="absolute right-3 top-3 rounded-lg p-1.5 text-zinc-500 hover:bg-zinc-100 hover:text-zinc-900 dark:text-zinc-400 dark:hover:bg-white/10 dark:hover:text-zinc-100"
           aria-label="Close"
           onClick={() => onOpenChange(false)}
         >
           <X className="size-5" />
         </button>
 
-        <h2 id="assign-work-sites-title" className="pr-10 text-lg font-semibold text-zinc-100">
+        <h2
+          id="assign-work-sites-title"
+          className="pr-10 text-lg font-semibold text-zinc-900 dark:text-zinc-100"
+        >
           Assign work sites
         </h2>
         {worker ? (
           <>
-            <p className="mt-1 text-sm text-zinc-400">{worker.name}</p>
+            <p className="mt-1 text-sm text-zinc-600 dark:text-zinc-400">{worker.name}</p>
             <p className="text-xs text-zinc-500">{worker.email}</p>
           </>
         ) : null}
 
         {!worker ? (
-          <p className="mt-4 text-sm text-zinc-500">No worker selected.</p>
+          <p className="mt-4 text-sm text-zinc-600 dark:text-zinc-500">No worker selected.</p>
         ) : !isEmployee ? (
-          <p className="mt-4 rounded-xl border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-sm text-amber-100">
+          <p className="mt-4 rounded-xl border border-amber-300/80 bg-amber-50 px-3 py-2 text-sm text-amber-950 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-100">
             Only <strong>employees</strong> can receive site assignments. This account is{" "}
             <span className="capitalize">{worker.role}</span>.
           </p>
@@ -174,29 +177,29 @@ export function AssignWorkSitesModal({ worker, open, onOpenChange, onSaved }: Pr
           </div>
         ) : (
           <>
-            <p className="mt-4 text-sm text-zinc-400">
+            <p className="mt-4 text-sm text-zinc-600 dark:text-zinc-400">
               Tick the sites this person may use for check-in and site switch. They get a notification when
               you save.
             </p>
-            <div className="mt-4 max-h-52 space-y-2 overflow-y-auto rounded-xl border border-white/10 bg-white/[0.03] p-3">
+            <div className="mt-4 max-h-52 space-y-2 overflow-y-auto rounded-xl border border-zinc-200/80 bg-zinc-50/90 p-3 dark:border-white/10 dark:bg-white/[0.03]">
               {sites.length === 0 ? (
-                <p className="text-sm text-zinc-500">No sites yet. Create one under Sites.</p>
+                <p className="text-sm text-zinc-600 dark:text-zinc-500">No sites yet. Create one under Sites.</p>
               ) : (
                 sites.map((s) => (
                   <label
                     key={s.id}
                     className={cn(
                       "flex cursor-pointer items-start gap-3 rounded-lg border border-transparent px-2 py-1.5",
-                      "hover:border-white/10 hover:bg-white/[0.04]"
+                      "hover:border-zinc-200 hover:bg-zinc-100/90 dark:hover:border-white/10 dark:hover:bg-white/[0.04]"
                     )}
                   >
                     <input
                       type="checkbox"
-                      className="mt-1 rounded border-white/20"
+                      className="mt-1 rounded border-zinc-300 dark:border-white/20"
                       checked={selected.has(s.id)}
                       onChange={() => toggleSite(s.id)}
                     />
-                    <span className="text-sm">
+                    <span className="text-sm text-zinc-900 dark:text-zinc-100">
                       <span className="font-medium">{s.name ?? s.id}</span>
                       <span className="ml-2 font-mono text-xs text-zinc-500">{s.id}</span>
                     </span>
@@ -206,9 +209,9 @@ export function AssignWorkSitesModal({ worker, open, onOpenChange, onSaved }: Pr
             </div>
 
             {selected.size > 0 ? (
-              <p className="mt-3 text-xs text-zinc-500">
+              <p className="mt-3 text-xs text-zinc-600 dark:text-zinc-500">
                 Selected:{" "}
-                <span className="text-zinc-300">
+                <span className="text-zinc-900 dark:text-zinc-300">
                   {[...selected].map((id) => siteById.get(id) ?? id).join(", ")}
                 </span>
               </p>

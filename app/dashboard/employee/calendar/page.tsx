@@ -8,7 +8,8 @@ export default function EmployeeCalendarPage() {
         <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
           Month view of your check-ins in your work time zone (matches your device: e.g. India IST,
           Nepal NPT). Open{" "}
-          <strong>Work</strong> in the sidebar for check-in and site tools.
+          <strong className="text-zinc-900 dark:text-zinc-200">Work</strong> in the sidebar for check-in and
+          site tools.
         </p>
       </div>
       <div className="mx-auto max-w-3xl">

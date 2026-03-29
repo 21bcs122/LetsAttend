@@ -29,7 +29,7 @@ export function AdminCreateSiteForm({
       </CardHeader>
       <CardContent>
         <SiteCreateFormInner
-          appearance="dark"
+          appearance="light"
           submitPath="/api/admin/sites"
           onCreated={() => onCreated?.()}
         />
