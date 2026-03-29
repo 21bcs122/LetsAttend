@@ -142,18 +142,34 @@ export function OvertimeAttendanceCapture({
     setRadiusError(null);
 
     if (step === 0) {
+      setStreamReady(false);
+      const cam = camRef.current;
+      if (!cam) {
+        toast.error("Camera not ready");
+        return;
+      }
+      const gpsPromise = getGpsFix();
       setBusy(true);
       try {
-        setStreamReady(false);
-        const g = await getGpsFix();
-        setGps(g);
-        await camRef.current?.start();
+        await cam.start();
         setStep(1);
       } catch (e) {
-        toast.error(e instanceof Error ? e.message : "Could not start");
+        camRef.current?.stop();
+        toast.error(e instanceof Error ? e.message : "Could not open camera");
         setGps(null);
+        void gpsPromise.catch(() => {});
+        return;
       } finally {
         setBusy(false);
+      }
+      try {
+        const g = await gpsPromise;
+        setGps(g);
+      } catch (e) {
+        camRef.current?.stop();
+        toast.error(e instanceof Error ? e.message : "Could not get location");
+        setGps(null);
+        setStep(0);
       }
       return;
     }
@@ -175,7 +191,9 @@ export function OvertimeAttendanceCapture({
   };
 
   const primaryDisabled =
-    busy || (step === 1 && !streamReady) || (step === 2 && (!gps || !selfie));
+    busy ||
+    (step === 1 && (!streamReady || !gps)) ||
+    (step === 2 && (!gps || !selfie));
 
   const title = mode === "check-in" ? "Overtime check-in" : "Overtime check-out";
   const hint =
@@ -249,13 +267,15 @@ export function OvertimeAttendanceCapture({
           >
             {busy
               ? step === 0
-                ? "Starting…"
+                ? "Opening camera…"
                 : step === 1
                   ? "Capturing…"
                   : "Submitting…"
-              : mode === "check-in"
-                ? "Submit overtime check-in"
-                : "Submit overtime check-out"}
+              : step === 1 && !gps
+                ? "Getting location…"
+                : mode === "check-in"
+                  ? "Submit overtime check-in"
+                  : "Submit overtime check-out"}
           </Button>
           <p className="text-xs text-zinc-500">{hint}</p>
         </div>

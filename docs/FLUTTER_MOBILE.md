@@ -1,6 +1,6 @@
 # MTES Attendance — Flutter mobile app
 
-The native client lives in **`mtes_attendance_mobile/`** next to the Next.js app. It uses the **same Firebase client keys** as the web app (see `.env.example` in the repo root) plus **`API_BASE_URL`**, which must point at your deployed Next.js origin (no trailing slash), because attendance writes, photo uploads, and most reads go through `/api/*` with a Firebase ID token.
+The native client lives in **`mtes_attendance_mobile/`** next to the Next.js app. It uses the **same Firebase project** for **Auth** and **Cloud Firestore**. **Photos** are uploaded through the **same Next.js route as the website**: **`POST /api/upload`**, which stores files in **Vercel Blob** (`BLOB_READ_WRITE_TOKEN` on the server). Set **`API_BASE_URL`** in `mtes_attendance_mobile/.env` to your deployed site origin (e.g. `https://your-app.vercel.app`). The app sends a **Firebase ID token** in `Authorization: Bearer …`, matching the web client.
 
 > **Git:** `mtes_attendance_mobile/` is listed in the root `.gitignore` so the folder stays on your machine but is not pushed. To version the app in Git, remove that line or move the app to its own repository.
 
@@ -66,7 +66,7 @@ Alternatively install the **Android SDK command-line tools** via Homebrew and po
 
    Fill in:
 
-   - `API_BASE_URL` — e.g. `https://your-deployment.vercel.app`
+   - **`API_BASE_URL`** — deployed Next.js origin (required for selfie upload via Vercel Blob)
    - `GOOGLE_SIGN_IN_WEB_CLIENT_ID` if you use Google Sign-In in **Chrome**
    - (Optional) `NEXT_PUBLIC_SUPER_ADMIN_EMAIL`
 
@@ -206,15 +206,17 @@ Choose a device (simulator, USB device, or `flutter devices`).
 
 ## Operational notes
 
-- The mobile app is a **client** to your existing backend: keep the Next.js deployment up and **`API_BASE_URL`** correct.  
-- Photo upload uses `/api/upload` (Vercel Blob); ensure `BLOB_READ_WRITE_TOKEN` is set on the server.  
+- Deploy **Firestore** rules when you change them: `firebase deploy --only firestore:rules`.  
+- Selfie uploads use **`/api/upload`** → **Vercel Blob**; ensure **`BLOB_READ_WRITE_TOKEN`** is set on Vercel (see root `.env.example`).  
+- **Flutter Web** uses a different origin than production; CORS for `/api/*` is handled in **`middleware.ts`**.  
 - Design and flows mirror the **mobile-oriented** parts of the web app (Work, Today, Calendar, friend check-in, overtime, notifications, settings, admin tabs).
 
 ## Troubleshooting
 
 | Issue | What to check |
 |--------|----------------|
-| `API_BASE_URL` / network errors | HTTPS origin, no trailing slash; device can reach the internet. |
+| Upload / 503 on photos | **`API_BASE_URL`** in `.env` matches your Vercel app; **`BLOB_READ_WRITE_TOKEN`** set on the server; user signed in (valid Bearer token). |
+| Firestore errors | Rules deployed; user signed in; device online. |
 | 401/403 on APIs | User signed in; Firestore `users/{uid}` exists; role matches expectations. |
 | Google Sign-In fails on Android | SHA-1/SHA-256 in Firebase, `google-services.json` package name matches `applicationId`. |
 | Location / camera denied | OS permissions and Info.plist / manifest strings. |

@@ -270,18 +270,34 @@ export function EmployeeSiteSwitchPanel({
     }
 
     if (step === 0) {
+      setStreamReady(false);
+      const cam = camRef.current;
+      if (!cam) {
+        toast.error("Camera not ready");
+        return;
+      }
+      const gpsPromise = getGpsFix();
       setBusy(true);
       try {
-        setStreamReady(false);
-        const g = await getGpsFix();
-        setGps(g);
-        await camRef.current?.start();
+        await cam.start();
         setStep(1);
       } catch (e) {
-        toast.error(e instanceof Error ? e.message : "Could not start");
+        camRef.current?.stop();
+        toast.error(e instanceof Error ? e.message : "Could not open camera");
         setGps(null);
+        void gpsPromise.catch(() => {});
+        return;
       } finally {
         setBusy(false);
+      }
+      try {
+        const g = await gpsPromise;
+        setGps(g);
+      } catch (e) {
+        camRef.current?.stop();
+        toast.error(e instanceof Error ? e.message : "Could not get location");
+        setGps(null);
+        setStep(0);
       }
       return;
     }
@@ -304,7 +320,7 @@ export function EmployeeSiteSwitchPanel({
 
   const primaryDisabled =
     busy ||
-    (step === 1 && !streamReady) ||
+    (step === 1 && (!streamReady || !gps)) ||
     (step === 2 && (!gps || !selfie));
 
   const primaryHint =
@@ -433,11 +449,13 @@ export function EmployeeSiteSwitchPanel({
           >
             {busy
               ? step === 0
-                ? "Starting…"
+                ? "Opening camera…"
                 : step === 1
                   ? "Capturing…"
                   : "Submitting…"
-              : "Submit site switch"}
+              : step === 1 && !gps
+                ? "Getting location…"
+                : "Submit site switch"}
           </Button>
           <p className="text-xs text-zinc-500">{primaryHint}</p>
         </div>
