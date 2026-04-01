@@ -4,17 +4,33 @@ import * as React from "react";
 import { DateTime } from "luxon";
 import { CalendarClock, ChevronDown, ChevronLeft, ChevronRight } from "lucide-react";
 import { useCalendarMode } from "@/components/client/calendar-mode-context";
-import { monthLabelForMode } from "@/lib/date/bs-calendar";
+import { adIsoToBsIso, bsIsoToAdIso, monthLabelForMode } from "@/lib/date/bs-calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
 const MONTH_IX = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12] as const;
 
-function bsYearFromAdYear(adYear: number, adMonthOneBased: number): string {
-  const label = monthLabelForMode(adYear, adMonthOneBased, "bs");
-  const m = /(\d{4})\s+BS$/.exec(label);
-  return m?.[1] ?? String(adYear);
+function bsYearMonthFromAd(adYear: number, adMonthOneBased: number): { bsYear: number; bsMonth: number } | null {
+  const adIso = `${String(adYear).padStart(4, "0")}-${String(adMonthOneBased).padStart(2, "0")}-01`;
+  const bs = adIsoToBsIso(adIso);
+  const [y, m] = bs.split("-").map(Number);
+  if (!Number.isFinite(y) || !Number.isFinite(m)) return null;
+  return { bsYear: y, bsMonth: m };
+}
+
+function adMonthFromBsYearMonth(bsYear: number, bsMonth: number, zone: string): string {
+  const bsIso = `${String(bsYear).padStart(4, "0")}-${String(bsMonth).padStart(2, "0")}-01`;
+  const adIso = bsIsoToAdIso(bsIso);
+  const ad = DateTime.fromISO(adIso, { zone });
+  return ad.isValid ? ad.toFormat("yyyy-MM") : DateTime.now().setZone(zone).toFormat("yyyy-MM");
+}
+
+function bsMonthNameFromBsYearMonth(bsYear: number, bsMonth: number, zone: string): string {
+  const adYm = adMonthFromBsYearMonth(bsYear, bsMonth, zone);
+  const ad = DateTime.fromFormat(adYm, "yyyy-MM", { zone });
+  if (!ad.isValid) return `M${bsMonth}`;
+  return monthLabelForMode(ad.year, ad.month, "bs").replace(/\s+\d{4}\s+BS$/, "");
 }
 
 export function WorkingHoursMonthPickerCard({
@@ -39,13 +55,19 @@ export function WorkingHoursMonthPickerCard({
   const selYear = selected.isValid ? selected.year : DateTime.now().setZone(zone).year;
   const selMonth = selected.isValid ? selected.month : DateTime.now().setZone(zone).month;
 
-  const [draftYear, setDraftYear] = React.useState(selYear);
+  const selectedBs = React.useMemo(() => bsYearMonthFromAd(selYear, selMonth), [selMonth, selYear]);
+  const [draftYear, setDraftYear] = React.useState(mode === "bs" ? (selectedBs?.bsYear ?? selYear) : selYear);
   React.useEffect(() => {
     if (!open) return;
-    setDraftYear(selYear);
-  }, [open, selYear]);
+    setDraftYear(mode === "bs" ? (selectedBs?.bsYear ?? selYear) : selYear);
+  }, [mode, open, selectedBs?.bsYear, selYear]);
 
   const pickMonth = (m: number) => {
+    if (mode === "bs") {
+      onChange(adMonthFromBsYearMonth(draftYear, m, zone));
+      setOpen(false);
+      return;
+    }
     const next = DateTime.fromObject({ year: draftYear, month: m, day: 1 }, { zone });
     if (!next.isValid) return;
     onChange(next.toFormat("yyyy-MM"));
@@ -117,7 +139,7 @@ export function WorkingHoursMonthPickerCard({
               <ChevronLeft className="size-4" aria-hidden />
             </Button>
             <span className="min-w-[4.5rem] text-center text-base font-semibold tabular-nums text-zinc-900 dark:text-zinc-100">
-              {mode === "bs" ? bsYearFromAdYear(draftYear, selMonth) : draftYear}
+              {draftYear}
             </span>
             <Button
               type="button"
@@ -135,12 +157,15 @@ export function WorkingHoursMonthPickerCard({
           {MONTH_IX.map((m) => {
             const label =
               mode === "bs"
-                ? monthLabelForMode(draftYear, m, "bs").replace(/\s+\d{4}\s+BS$/, "")
+                ? bsMonthNameFromBsYearMonth(draftYear, m, zone)
                 : DateTime.fromObject(
                     { year: draftYear, month: m, day: 1 },
                     { zone }
                   ).toFormat("LLL");
-            const isSel = draftYear === selYear && m === selMonth;
+            const isSel =
+              mode === "bs"
+                ? selectedBs?.bsYear === draftYear && selectedBs?.bsMonth === m
+                : draftYear === selYear && m === selMonth;
             return (
               <button
                 key={m}

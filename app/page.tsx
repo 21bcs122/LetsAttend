@@ -39,16 +39,10 @@ export default function HomePage() {
           </p>
           <h1 className="max-w-3xl text-balance text-xl font-semibold leading-snug tracking-tight text-zinc-900 sm:text-2xl sm:leading-snug md:text-4xl md:leading-tight lg:text-5xl dark:text-zinc-50">
             <span className="md:hidden">
-              Record when and where
-              <br />
-              your teams work—clearly
-              <br />
-              and on the job site.
+            Track Site Work.
             </span>
             <span className="hidden md:block">
-              Record when and where your teams work—clearly
-              <br />
-              and on the job site.
+            Track Site Work
             </span>
           </h1>
           <div className="mt-10 flex flex-wrap items-center justify-center gap-4">

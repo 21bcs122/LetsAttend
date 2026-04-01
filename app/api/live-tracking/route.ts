@@ -34,18 +34,24 @@ export async function POST(req: Request) {
   const ref = db.collection("live_tracking").doc(decoded.uid);
   const now = FieldValue.serverTimestamp();
 
-  await ref.set(
-    {
-      workerId: decoded.uid,
-      location: {
-        latitude,
-        longitude,
-        ...(accuracyM != null ? { accuracyM } : {}),
-      },
-      lastUpdated: now,
+  const payload = {
+    workerId: decoded.uid,
+    location: {
+      latitude,
+      longitude,
+      ...(accuracyM != null ? { accuracyM } : {}),
     },
-    { merge: true }
-  );
+    lastUpdated: now,
+  };
+
+  await Promise.all([
+    ref.set(payload, { merge: true }),
+    db.collection("live_tracking_logs").add({
+      workerId: decoded.uid,
+      at: now,
+      ...payload.location,
+    }),
+  ]);
 
   return NextResponse.json({ ok: true });
 }

@@ -4,7 +4,12 @@ import * as React from "react";
 import { DateTime } from "luxon";
 import { ChevronDown, ChevronUp } from "lucide-react";
 import { useCalendarMode } from "@/components/client/calendar-mode-context";
-import { dayNumberForMode, monthLabelForMode } from "@/lib/date/bs-calendar";
+import {
+  adIsoToBsIso,
+  bsIsoToAdIso,
+  dayNumberForMode,
+  monthLabelForMode,
+} from "@/lib/date/bs-calendar";
 import { calendarDateKeyInTimeZone } from "@/lib/date/calendar-day-key";
 import { normalizeTimeZoneId } from "@/lib/date/time-zone";
 import { cn } from "@/lib/utils";
@@ -78,10 +83,18 @@ const MONTH_NAMES = [
   "December",
 ] as const;
 
-function bsYearFromAdYear(adYear: number, adMonthOneBased: number): string {
-  const label = monthLabelForMode(adYear, adMonthOneBased, "bs");
-  const m = /(\d{4})\s+BS$/.exec(label);
-  return m?.[1] ?? String(adYear);
+function bsYearMonthFromAnchor(anchor: DateTime): { bsYear: number; bsMonth: number } | null {
+  const bs = adIsoToBsIso(anchor.toFormat("yyyy-MM-dd"));
+  const [y, m] = bs.split("-").map(Number);
+  if (!Number.isFinite(y) || !Number.isFinite(m)) return null;
+  return { bsYear: y, bsMonth: m };
+}
+
+function adAnchorFromBsYearMonth(bsYear: number, bsMonth: number, tz: string): DateTime {
+  const bsIso = `${String(bsYear).padStart(4, "0")}-${String(bsMonth).padStart(2, "0")}-01`;
+  const adIso = bsIsoToAdIso(bsIso);
+  const ad = DateTime.fromISO(adIso, { zone: tz });
+  return ad.isValid ? ad.startOf("month") : DateTime.now().setZone(tz).startOf("month");
 }
 
 export type DatePickerPanelProps = {
@@ -120,14 +133,22 @@ export function DatePickerPanel({
   const goPrevMonth = () => setViewMonth((m) => m.minus({ months: 1 }).startOf("month"));
   const goNextMonth = () => setViewMonth((m) => m.plus({ months: 1 }).startOf("month"));
 
-  const year = viewMonth.year;
+  const bsCurrent = bsYearMonthFromAnchor(viewMonth);
+  const year = mode === "bs" ? (bsCurrent?.bsYear ?? viewMonth.year) : viewMonth.year;
   const setYear = (y: number) => {
+    if (mode === "bs") {
+      const bsCurrent = bsYearMonthFromAnchor(viewMonth);
+      const next = adAnchorFromBsYearMonth(y, bsCurrent?.bsMonth ?? 1, tz);
+      setViewMonth(next);
+      return;
+    }
     setViewMonth(viewMonth.set({ year: y }).startOf("month"));
   };
 
   const years = React.useMemo(() => {
-    const y0 = Math.min(year - 5, new Date().getFullYear() - 2);
-    const y1 = Math.max(year + 8, new Date().getFullYear() + 6);
+    const fallbackNow = new Date().getFullYear();
+    const y0 = year - 5;
+    const y1 = Math.max(year + 8, fallbackNow + 6);
     const out: number[] = [];
     for (let y = y0; y <= y1; y++) out.push(y);
     return out;
@@ -157,7 +178,7 @@ export function DatePickerPanel({
           <DropdownMenuContent align="start" className="max-h-[min(70vh,22rem)] w-[min(calc(100vw-2rem),14rem)] overflow-y-auto">
             {MONTH_NAMES.map((name, idx) => {
               const m = idx + 1;
-              const isCurrent = viewMonth.month === m;
+              const isCurrent = mode === "bs" ? bsCurrent?.bsMonth === m : viewMonth.month === m;
               const monthText =
                 mode === "bs"
                   ? monthLabelForMode(viewMonth.year, m, "bs").replace(/\s+\d{4}\s+BS$/, "")
@@ -167,6 +188,12 @@ export function DatePickerPanel({
                   key={name}
                   className={cn(isCurrent && "bg-cyan-500/15 text-cyan-200")}
                   onSelect={() => {
+                    if (mode === "bs") {
+                      const bs = bsYearMonthFromAnchor(viewMonth);
+                      const next = adAnchorFromBsYearMonth(bs?.bsYear ?? viewMonth.year, m, tz);
+                      setViewMonth(next);
+                      return;
+                    }
                     setViewMonth(viewMonth.set({ month: m }).startOf("month"));
                   }}
                 >
@@ -191,7 +218,7 @@ export function DatePickerPanel({
                       : "text-zinc-300 hover:bg-zinc-800 hover:text-white"
                   )}
                 >
-                  {mode === "bs" ? bsYearFromAdYear(y, viewMonth.month) : y}
+                  {mode === "bs" ? y : y}
                 </button>
               ))}
             </div>

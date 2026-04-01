@@ -30,6 +30,15 @@ export async function GET(req: Request) {
       auth.decoded.uid,
       parsed.data.day
     );
+    if (!payload.absent) {
+      payload.analytics.tracking = {
+        pingCount: 0,
+        outOfSiteMs: 0,
+        offlineMs: 0,
+        outOfSiteWindows: [],
+        offlineWindows: [],
+      };
+    }
     return NextResponse.json(payload);
   } catch (e) {
     return jsonError(e instanceof Error ? e.message : "Failed", 400);

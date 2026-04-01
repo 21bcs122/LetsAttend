@@ -6,7 +6,6 @@ import { EmployeeAssignmentBanner } from "@/components/client/employee-assignmen
 import { EmployeeCheckInPanel } from "@/components/client/employee-check-in-panel";
 import { EmployeeCheckOutPanel } from "@/components/client/employee-check-out-panel";
 import { EmployeeSiteSwitchPanel } from "@/components/client/employee-site-switch-panel";
-import { SearchableSelect } from "@/components/ui/searchable-select";
 import { getFirebaseAuth } from "@/lib/firebase/client";
 import { Skeleton } from "@/components/ui/skeleton";
 
@@ -25,7 +24,7 @@ type WorkerRow = {
 export function FriendAttendancePage() {
   const [workers, setWorkers] = React.useState<WorkerRow[]>([]);
   const [loading, setLoading] = React.useState(true);
-  const [selectedId, setSelectedId] = React.useState("");
+  const [employeeIdQuery, setEmployeeIdQuery] = React.useState("");
 
   React.useEffect(() => {
     const auth = getFirebaseAuth();
@@ -53,17 +52,13 @@ export function FriendAttendancePage() {
     return () => unsub();
   }, []);
 
-  const options = React.useMemo(
+  const selected = React.useMemo(
     () =>
-      workers.map((w) => ({
-        value: w.id,
-        label: `${w.employeeId || w.id} (${w.name || "Employee"})`,
-        keywords: [w.employeeId, w.id, w.name, w.email],
-      })),
-    [workers]
+      workers.find(
+        (w) => w.employeeId?.trim().toLowerCase() === employeeIdQuery.trim().toLowerCase()
+      ),
+    [employeeIdQuery, workers]
   );
-
-  const selected = workers.find((w) => w.id === selectedId);
 
   return (
     <div className="p-3 sm:p-6 md:p-8">
@@ -72,7 +67,7 @@ export function FriendAttendancePage() {
         <h1 className="text-2xl font-semibold tracking-tight">Friend check-in</h1>
         <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
           Use this when a coworker doesn&apos;t have their phone. Sign in with <strong>your</strong> account,
-          pick their name or email, then check in, switch sites, or check out — records go to{" "}
+          search their <strong>Employee ID</strong>, then check in, switch sites, or check out — records go to{" "}
           <strong>their</strong> attendance. Server allows this only if you share a work site (or you are an
           admin).
         </p>
@@ -80,27 +75,30 @@ export function FriendAttendancePage() {
 
       <div className="mx-auto mb-8 max-w-2xl">
         <label className="flex flex-col gap-2 text-sm">
-          <span className="text-zinc-400">Coworker (search by employee ID, name, or email)</span>
+          <span className="text-zinc-400">Employee ID</span>
           {loading ? (
             <Skeleton className="h-11 w-full rounded-xl" />
           ) : (
-            <SearchableSelect
-              value={selectedId}
-              onValueChange={setSelectedId}
-              options={options}
-              includeEmpty
-              emptyLabel="Select a coworker…"
-              searchPlaceholder="Search employee ID, name, or email…"
-              emptySearchMessage="No coworkers found."
-              listClassName="max-h-[min(320px,50vh)]"
+            <input
+              value={employeeIdQuery}
+              onChange={(e) => setEmployeeIdQuery(e.target.value)}
+              placeholder="Enter Employee ID (e.g., MTES-0001)"
+              className="h-11 w-full rounded-xl border border-zinc-200/90 bg-white px-3 text-zinc-900 dark:border-white/10 dark:bg-black/40 dark:text-zinc-100"
             />
           )}
         </label>
+        {!loading && selected ? (
+          <div className="mt-3 rounded-xl border border-emerald-500/25 bg-emerald-500/5 p-3">
+            <p className="text-sm font-medium text-emerald-300">
+              {selected.employeeId} ({selected.name || "Employee"})
+            </p>
+          </div>
+        ) : null}
       </div>
 
-      {!selectedId || !selected ? (
+      {!selected ? (
         <p className="mx-auto max-w-2xl text-center text-sm text-zinc-500">
-          Select a coworker above to enable check-in, site switch, and check-out for their account.
+          Enter a valid Employee ID above to enable check-in, site switch, and check-out for their account.
         </p>
       ) : (
         <div className="mx-auto flex max-w-2xl flex-col gap-4 md:gap-6">

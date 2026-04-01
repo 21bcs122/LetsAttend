@@ -4,6 +4,7 @@ import * as React from "react";
 import { Suspense } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { onAuthStateChanged } from "firebase/auth";
+import { CheckCircle2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -26,6 +27,8 @@ import { toast } from "sonner";
 import { getFirebaseAuth } from "@/lib/firebase/client";
 import { SiteSelectWithCustomRow } from "@/components/client/site-select-with-custom-row";
 import { Skeleton } from "@/components/ui/skeleton";
+import { calendarDateKeyInTimeZone } from "@/lib/date/calendar-day-key";
+import { normalizeTimeZoneId } from "@/lib/date/time-zone";
 
 type Site = { id: string; name?: string };
 
@@ -33,6 +36,12 @@ type RadiusErr = { distanceM: number; radiusM: number };
 
 /** 0 = need GPS+camera, 1 = need selfie capture, 2 = ready to POST */
 type FlowStep = 0 | 1 | 2;
+type TodayPayload = {
+  siteId: string | null;
+  checkIn: { atMs: number | null } | null;
+  checkOut: { atMs: number | null } | null;
+  error?: string;
+};
 
 function EmployeeCheckInPanelSkeleton() {
   return (
@@ -57,8 +66,6 @@ function EmployeeCheckInPanelInner({ proxyForUid }: { proxyForUid?: string }) {
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const { user } = useDashboardUser();
-  const isAdminLike =
-    user?.role === "admin" || user?.role === "super_admin";
   /**
    * Set only when landing with `?fromAssignment=1` from the bell “Go to Work” link.
    * Cleared when leaving the main Work page, after successful check-in, or on full refresh (no URL flag).
@@ -85,7 +92,9 @@ function EmployeeCheckInPanelInner({ proxyForUid }: { proxyForUid?: string }) {
   } | null>(null);
   const [radiusError, setRadiusError] = React.useState<RadiusErr | null>(null);
   const [busy, setBusy] = React.useState(false);
+  const [done, setDone] = React.useState(false);
   const camRef = React.useRef<CameraCaptureHandle>(null);
+  const displayTz = normalizeTimeZoneId(user?.timeZone);
 
   const authHeaders = React.useCallback(async () => {
     const auth = getFirebaseAuth();
@@ -121,6 +130,34 @@ function EmployeeCheckInPanelInner({ proxyForUid }: { proxyForUid?: string }) {
       unsub();
     };
   }, [loadSites]);
+
+  React.useEffect(() => {
+    if (proxyForUid) return;
+    let cancelled = false;
+    const run = async () => {
+      try {
+        const auth = getFirebaseAuth();
+        const u = auth.currentUser;
+        if (!u) return;
+        const token = await u.getIdToken();
+        const day = calendarDateKeyInTimeZone(new Date(), displayTz);
+        const res = await fetch(`/api/attendance/today?day=${encodeURIComponent(day)}`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        const data = (await res.json()) as TodayPayload;
+        if (!res.ok || cancelled) return;
+        const open = !!data.checkIn && !data.checkOut;
+        setDone(open);
+        if (open && data.siteId) setSiteId(data.siteId);
+      } catch {
+        /* ignore */
+      }
+    };
+    void run();
+    return () => {
+      cancelled = true;
+    };
+  }, [displayTz, proxyForUid]);
 
   React.useEffect(() => {
     if (step === 0) setStreamReady(false);
@@ -280,13 +317,42 @@ function EmployeeCheckInPanelInner({ proxyForUid }: { proxyForUid?: string }) {
       });
       setRadiusError(null);
       setAssignmentFilterIds(null);
+      setDone(true);
       resetCaptureFlow();
+      window.dispatchEvent(new Event("attendance-updated"));
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Check-in failed");
     } finally {
       setBusy(false);
     }
   };
+
+  const startCaptureFlow = React.useCallback(async () => {
+    setRadiusError(null);
+    if (!siteId || busy || step !== 0 || done) return;
+    setStreamReady(false);
+    const cam = camRef.current;
+    if (!cam) {
+      toast.error("Camera not ready");
+      return;
+    }
+    setBusy(true);
+    try {
+      await cam.start();
+      setStep(1);
+    } catch (e) {
+      camRef.current?.stop();
+      toast.error(e instanceof Error ? e.message : "Could not open camera");
+      return;
+    } finally {
+      setBusy(false);
+    }
+  }, [busy, done, siteId, step]);
+
+  React.useEffect(() => {
+    if (!siteId) return;
+    void startCaptureFlow();
+  }, [siteId, startCaptureFlow]);
 
   const onPrimaryClick = async () => {
     setRadiusError(null);
@@ -295,44 +361,19 @@ function EmployeeCheckInPanelInner({ proxyForUid }: { proxyForUid?: string }) {
       return;
     }
 
-    if (step === 0) {
-      setStreamReady(false);
-      const cam = camRef.current;
-      if (!cam) {
-        toast.error("Camera not ready");
-        return;
-      }
-      const gpsPromise = getGpsFix();
-      setBusy(true);
-      try {
-        await cam.start();
-        setStep(1);
-      } catch (e) {
-        camRef.current?.stop();
-        toast.error(e instanceof Error ? e.message : "Could not open camera");
-        setGps(null);
-        void gpsPromise.catch(() => {});
-        return;
-      } finally {
-        setBusy(false);
-      }
-      try {
-        const g = await gpsPromise;
-        setGps(g);
-      } catch (e) {
-        camRef.current?.stop();
-        toast.error(e instanceof Error ? e.message : "Could not get location");
-        setGps(null);
-        setStep(0);
-      }
-      return;
-    }
+    if (step === 0) return;
 
     if (step === 1) {
       if (!streamReady) return;
       setBusy(true);
       try {
+        const gpsPromise = getGpsFix();
         await camRef.current?.capture();
+        const g = await gpsPromise;
+        setGps(g);
+      } catch (e) {
+        toast.error(e instanceof Error ? e.message : "Could not get location");
+        setGps(null);
       } finally {
         setBusy(false);
       }
@@ -346,17 +387,18 @@ function EmployeeCheckInPanelInner({ proxyForUid }: { proxyForUid?: string }) {
 
   const primaryDisabled =
     busy ||
+    done ||
     (step === 0 && !siteId) ||
-    (step === 1 && (!streamReady || !gps)) ||
+    (step === 1 && !streamReady) ||
     (step === 2 && (!gps || !selfie));
 
   const primaryHint =
     step === 0 && !siteId
       ? "Choose a site from the list first."
       : step === 0
-        ? "Tap once to capture location and open the camera."
+        ? "Select site to open camera."
         : step === 1
-          ? "Tap again to take your selfie."
+          ? "Tap to capture selfie (GPS captured now)."
           : "Tap again to send check-in.";
 
   return (
@@ -371,8 +413,7 @@ function EmployeeCheckInPanelInner({ proxyForUid }: { proxyForUid?: string }) {
             </>
           ) : (
             <>
-              One button: first tap gets your location and opens the camera; second tap saves your
-              selfie; third tap submits. Coordinates are hidden — admins see a debug line only.
+              Select your site to open camera. GPS is captured when you click picture.
             </>
           )}
         </CardDescription>
@@ -412,13 +453,6 @@ function EmployeeCheckInPanelInner({ proxyForUid }: { proxyForUid?: string }) {
           onRefreshSites={loadSites}
           showCustomSiteButton
         />
-
-        {isAdminLike && gps ? (
-          <p className="text-xs font-mono text-zinc-500">
-            Admin debug: {gps.latitude.toFixed(6)}, {gps.longitude.toFixed(6)}
-            {gps.accuracyM != null && ` (±${Math.round(gps.accuracyM)}m)`}
-          </p>
-        ) : null}
 
         <div className="space-y-2">
           <p className="text-xs text-zinc-500">Camera</p>
@@ -464,17 +498,23 @@ function EmployeeCheckInPanelInner({ proxyForUid }: { proxyForUid?: string }) {
         <div className="flex flex-col gap-2">
           <Button
             type="button"
+            className={done ? "bg-emerald-600 text-white hover:bg-emerald-600" : ""}
             disabled={primaryDisabled}
             onClick={() => void onPrimaryClick()}
           >
-            {busy
+            {done ? (
+              <span className="inline-flex items-center gap-2">
+                <CheckCircle2 className="size-4" aria-hidden />
+                You are checked in
+              </span>
+            ) : busy
               ? step === 0
                 ? "Opening camera…"
                 : step === 1
                   ? "Capturing…"
                   : "Submitting…"
-              : step === 1 && !gps
-                ? "Getting location…"
+              : step === 1
+                ? "Capture"
                 : "Submit check-in"}
           </Button>
           <p className="text-xs text-zinc-500">{primaryHint}</p>

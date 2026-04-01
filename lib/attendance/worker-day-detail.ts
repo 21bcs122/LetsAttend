@@ -2,8 +2,11 @@ import type { Firestore } from "firebase-admin/firestore";
 import { DateTime } from "luxon";
 import { serializeFirestoreForJson } from "@/lib/firestore/serialize-for-json";
 import { DEFAULT_ATTENDANCE_TIME_ZONE } from "@/lib/date/time-zone";
+import { haversineMeters } from "@/lib/geo/haversine";
 
 const DAY_RE = /^\d{4}-\d{2}-\d{2}$/;
+const TRACK_PING_INTERVAL_MS = 45_000;
+const OFFLINE_GAP_MS = 90_000;
 
 function timeToMs(t: unknown): number | null {
   if (!t || typeof t !== "object") return null;
@@ -55,6 +58,12 @@ export type SiteSegment = {
   startMs: number;
   endMs: number | null;
   durationMs: number | null;
+};
+
+export type TrackingWindow = {
+  startMs: number;
+  endMs: number;
+  durationMs: number;
 };
 
 export type OvertimeDayDetailRow = {
@@ -255,6 +264,38 @@ async function fetchOffsiteForWorkerDay(
   return rows.map((x) => x.row);
 }
 
+type TrackingPing = {
+  atMs: number;
+  latitude: number;
+  longitude: number;
+};
+
+async function fetchTrackingPingsForWorkerDay(
+  db: Firestore,
+  workerId: string,
+  day: string
+): Promise<TrackingPing[]> {
+  const dayStart = DateTime.fromISO(day, { zone: DEFAULT_ATTENDANCE_TIME_ZONE }).startOf("day");
+  const dayEnd = dayStart.plus({ days: 1 });
+  const snap = await db
+    .collection("live_tracking_logs")
+    .where("workerId", "==", workerId)
+    .where("at", ">=", dayStart.toJSDate())
+    .where("at", "<", dayEnd.toJSDate())
+    .orderBy("at", "asc")
+    .get();
+  return snap.docs
+    .map((d) => {
+      const x = d.data() as Record<string, unknown>;
+      const atMs = timeToMs(x.at);
+      const latitude = Number(x.latitude);
+      const longitude = Number(x.longitude);
+      if (atMs == null || !Number.isFinite(latitude) || !Number.isFinite(longitude)) return null;
+      return { atMs, latitude, longitude };
+    })
+    .filter((x): x is TrackingPing => !!x);
+}
+
 export type WorkerDayDetailResult =
   | {
       ok: true;
@@ -302,6 +343,13 @@ export type WorkerDayDetailResult =
         lastEventMs: number | null;
         totalSessionMs: number | null;
         segments: SiteSegment[];
+        tracking: {
+          pingCount: number;
+          outOfSiteMs: number;
+          offlineMs: number;
+          outOfSiteWindows: TrackingWindow[];
+          offlineWindows: TrackingWindow[];
+        };
       };
       overtime: OvertimeDayDetailRow[];
       offsite: OffsiteDayDetailRow[];
@@ -316,11 +364,12 @@ export async function buildWorkerDayDetail(
     throw new Error("Invalid day");
   }
 
-  const [userSnap, overtime, offsite, attSnap] = await Promise.all([
+  const [userSnap, overtime, offsite, attSnap, trackingPings] = await Promise.all([
     db.collection("users").doc(workerId).get(),
     fetchOvertimeForWorkerDay(db, workerId, day),
     fetchOffsiteForWorkerDay(db, workerId, day),
     db.collection("attendance").doc(`${workerId}_${day}`).get(),
+    fetchTrackingPingsForWorkerDay(db, workerId, day),
   ]);
 
   const workerName =
@@ -386,13 +435,22 @@ export async function buildWorkerDayDetail(
   }
 
   const siteNames: Record<string, string> = {};
+  const siteGeo: Record<string, { latitude: number; longitude: number; radius: number } | null> = {};
   for (const sid of siteIds) {
     const s = await db.collection("sites").doc(sid).get();
     if (s.exists) {
       const n = s.data()?.name;
       siteNames[sid] = typeof n === "string" ? n : sid;
+      const slat = Number(s.get("latitude"));
+      const slng = Number(s.get("longitude"));
+      const sr = Number(s.get("radius"));
+      siteGeo[sid] =
+        Number.isFinite(slat) && Number.isFinite(slng) && Number.isFinite(sr)
+          ? { latitude: slat, longitude: slng, radius: sr }
+          : null;
     } else {
       siteNames[sid] = sid;
+      siteGeo[sid] = null;
     }
   }
 
@@ -538,6 +596,69 @@ export async function buildWorkerDayDetail(
     }
   }
 
+  const logList = [...trackingPings].sort((a, b) => a.atMs - b.atMs);
+  const outOfSiteWindows: TrackingWindow[] = [];
+  let outOfSiteMs = 0;
+  for (const seg of segments) {
+    const geo = siteGeo[seg.siteId];
+    if (!geo) continue;
+    const segEnd = seg.endMs ?? nowMs;
+    const segPings = logList.filter((p) => p.atMs >= seg.startMs && p.atMs <= segEnd);
+    let outsideStart: number | null = null;
+    for (const p of segPings) {
+      const distance = haversineMeters(p.latitude, p.longitude, geo.latitude, geo.longitude);
+      const outside = distance > geo.radius;
+      if (outside && outsideStart == null) {
+        outsideStart = p.atMs;
+      } else if (!outside && outsideStart != null) {
+        const durationMs = Math.max(0, p.atMs - outsideStart);
+        if (durationMs > 0) {
+          outOfSiteWindows.push({ startMs: outsideStart, endMs: p.atMs, durationMs });
+          outOfSiteMs += durationMs;
+        }
+        outsideStart = null;
+      }
+    }
+    if (outsideStart != null) {
+      const durationMs = Math.max(0, segEnd - outsideStart);
+      if (durationMs > 0) {
+        outOfSiteWindows.push({ startMs: outsideStart, endMs: segEnd, durationMs });
+        outOfSiteMs += durationMs;
+      }
+    }
+  }
+
+  const offlineWindows: TrackingWindow[] = [];
+  let offlineMs = 0;
+  if (checkInMs != null) {
+    const sessionEnd = checkOutMs ?? nowMs;
+    let prev = checkInMs;
+    const sessionPings = logList.filter((p) => p.atMs >= checkInMs && p.atMs <= sessionEnd);
+    for (const p of sessionPings) {
+      const gap = p.atMs - prev;
+      if (gap > OFFLINE_GAP_MS) {
+        const startMs = prev + TRACK_PING_INTERVAL_MS;
+        const endMs = p.atMs;
+        const durationMs = Math.max(0, endMs - startMs);
+        if (durationMs > 0) {
+          offlineWindows.push({ startMs, endMs, durationMs });
+          offlineMs += durationMs;
+        }
+      }
+      prev = p.atMs;
+    }
+    const tailGap = sessionEnd - prev;
+    if (tailGap > OFFLINE_GAP_MS) {
+      const startMs = prev + TRACK_PING_INTERVAL_MS;
+      const endMs = sessionEnd;
+      const durationMs = Math.max(0, endMs - startMs);
+      if (durationMs > 0) {
+        offlineWindows.push({ startMs, endMs, durationMs });
+        offlineMs += durationMs;
+      }
+    }
+  }
+
   return {
     ok: true,
     day,
@@ -580,6 +701,13 @@ export async function buildWorkerDayDetail(
       lastEventMs,
       totalSessionMs,
       segments,
+      tracking: {
+        pingCount: logList.length,
+        outOfSiteMs,
+        offlineMs,
+        outOfSiteWindows,
+        offlineWindows,
+      },
     },
     overtime,
     offsite,

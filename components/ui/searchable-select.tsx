@@ -14,7 +14,12 @@ import {
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
 
-export type SearchableSelectOption = { value: string; label: string; keywords?: string[] };
+export type SearchableSelectOption = {
+  value: string;
+  label: string;
+  keywords?: string[];
+  disabled?: boolean;
+};
 
 export type SearchableSelectProps = {
   value: string;
@@ -134,7 +139,9 @@ export function SearchableSelect({
                 <CommandItem
                   key={opt.value === "" ? "__empty__" : opt.value}
                   value={`${opt.label} ${(opt.keywords ?? []).join(" ")}`}
+                  disabled={!!opt.disabled}
                   onSelect={() => {
+                    if (opt.disabled) return;
                     onValueChange(opt.value);
                     setOpen(false);
                   }}
@@ -142,11 +149,18 @@ export function SearchableSelect({
                   <Check
                     className={cn(
                       "mr-2 size-4 shrink-0",
-                      value === opt.value ? "opacity-100" : "opacity-0"
+                      !opt.disabled && value === opt.value ? "opacity-100" : "opacity-0"
                     )}
                     aria-hidden
                   />
-                  <span className="min-w-0 flex-1 truncate">{opt.label}</span>
+                  <span
+                    className={cn(
+                      "min-w-0 flex-1 truncate",
+                      opt.disabled && "select-none tracking-wider text-zinc-500"
+                    )}
+                  >
+                    {opt.label}
+                  </span>
                 </CommandItem>
               ))}
             </CommandGroup>

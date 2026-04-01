@@ -80,6 +80,21 @@ export type DayDetailPayload =
           endMs: number | null;
           durationMs: number | null;
         }[];
+        tracking: {
+          pingCount: number;
+          outOfSiteMs: number;
+          offlineMs: number;
+          outOfSiteWindows: {
+            startMs: number;
+            endMs: number;
+            durationMs: number;
+          }[];
+          offlineWindows: {
+            startMs: number;
+            endMs: number;
+            durationMs: number;
+          }[];
+        };
       };
       overtime: OvertimeDayDetailRow[];
       offsite: OffsiteDayDetailRow[];
@@ -520,6 +535,36 @@ export function AttendanceDayDetailView({
                     </li>
                   ))}
                 </ul>
+              </CardContent>
+            </Card>
+          ) : null}
+
+          {(user?.role === "admin" || user?.role === "super_admin") ? (
+            <Card className="border-cyan-500/25 bg-cyan-500/[0.04]">
+              <CardHeader>
+                <CardTitle className="text-base">Tracking diagnostics (admin)</CardTitle>
+                <CardDescription>
+                  Out-of-site and connectivity gaps are estimated from live pings (~45s interval).
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-3 text-sm">
+                <div className="grid gap-2 sm:grid-cols-3">
+                  <p>Ping count: <span className="font-mono">{data.analytics.tracking.pingCount}</span></p>
+                  <p>Out of site: <span className="font-mono">{fmtDuration(data.analytics.tracking.outOfSiteMs)}</span></p>
+                  <p>Offline/no pings: <span className="font-mono">{fmtDuration(data.analytics.tracking.offlineMs)}</span></p>
+                </div>
+                {data.analytics.tracking.offlineWindows.length > 0 ? (
+                  <div>
+                    <p className="mb-1 text-xs uppercase tracking-wide text-zinc-500">Offline windows</p>
+                    <ul className="space-y-1">
+                      {data.analytics.tracking.offlineWindows.map((w, i) => (
+                        <li key={`off-${i}`} className="font-mono text-xs text-zinc-400">
+                          {fmtLocal(w.startMs, displayTz)} → {fmtLocal(w.endMs, displayTz)} ({fmtDuration(w.durationMs)})
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                ) : null}
               </CardContent>
             </Card>
           ) : null}

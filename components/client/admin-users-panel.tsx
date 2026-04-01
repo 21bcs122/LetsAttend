@@ -456,7 +456,8 @@ export function AdminUsersPanel() {
                   {users.map((r) => (
                     <tr
                       key={r.id}
-                      className="border-b border-white/5 hover:bg-white/[0.02]"
+                      className="cursor-pointer border-b border-white/5 hover:bg-white/[0.02]"
+                      onClick={() => openCalendarFor(r.id)}
                     >
                       <td className="px-3 py-2 font-medium">{r.name}</td>
                       <td className="px-3 py-2 text-zinc-400">{r.email}</td>
@@ -469,7 +470,10 @@ export function AdminUsersPanel() {
                               variant="ghost"
                               size="sm"
                               className="h-8 text-amber-400 hover:text-amber-300"
-                              onClick={() => void demoteAdmin(r.email, r.name)}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                void demoteAdmin(r.email, r.name);
+                              }}
                             >
                               Remove admin
                             </Button>
@@ -485,7 +489,10 @@ export function AdminUsersPanel() {
                             variant="secondary"
                             size="sm"
                             className="h-8 text-xs"
-                            onClick={() => setAssignWorker(r)}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setAssignWorker(r);
+                            }}
                           >
                             Assign
                           </Button>
@@ -499,7 +506,10 @@ export function AdminUsersPanel() {
                           variant="ghost"
                           size="sm"
                           className="h-8 text-cyan-400"
-                          onClick={() => openCalendarFor(r.id)}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            openCalendarFor(r.id);
+                          }}
                         >
                           View
                         </Button>
@@ -512,7 +522,8 @@ export function AdminUsersPanel() {
                               variant="destructive"
                               size="sm"
                               className="h-8 text-xs"
-                              onClick={() => {
+                              onClick={(e) => {
+                                e.stopPropagation();
                                 setDeleteTarget(r);
                                 setDeletePhrase("");
                                 setResetMsg(null);

@@ -42,8 +42,6 @@ export function EmployeeSiteSwitchPanel({
   subjectTimeZone?: string;
 } = {}) {
   const { user } = useDashboardUser();
-  const isAdminLike =
-    user?.role === "admin" || user?.role === "super_admin";
   const [expanded, setExpanded] = React.useState(false);
   const [sites, setSites] = React.useState<Site[]>([]);
   const [siteNames, setSiteNames] = React.useState<Record<string, string>>({});
@@ -181,6 +179,33 @@ export function EmployeeSiteSwitchPanel({
     setStreamReady,
   });
 
+  const startCaptureFlow = React.useCallback(async () => {
+    if (!siteId || busy || step !== 0) return;
+    setRadiusError(null);
+    setStreamReady(false);
+    const cam = camRef.current;
+    if (!cam) {
+      toast.error("Camera not ready");
+      return;
+    }
+    setBusy(true);
+    try {
+      await cam.start();
+      setStep(1);
+    } catch (e) {
+      camRef.current?.stop();
+      toast.error(e instanceof Error ? e.message : "Could not open camera");
+      return;
+    } finally {
+      setBusy(false);
+    }
+  }, [busy, siteId, step]);
+
+  React.useEffect(() => {
+    if (!siteId) return;
+    void startCaptureFlow();
+  }, [siteId, startCaptureFlow]);
+
   React.useEffect(() => {
     if (!sessionOpen) {
       resetCaptureFlow();
@@ -255,6 +280,7 @@ export function EmployeeSiteSwitchPanel({
       setRadiusError(null);
       resetCaptureFlow();
       setSiteId("");
+      window.dispatchEvent(new Event("attendance-updated"));
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Switch failed");
     } finally {
@@ -269,44 +295,19 @@ export function EmployeeSiteSwitchPanel({
       return;
     }
 
-    if (step === 0) {
-      setStreamReady(false);
-      const cam = camRef.current;
-      if (!cam) {
-        toast.error("Camera not ready");
-        return;
-      }
-      const gpsPromise = getGpsFix();
-      setBusy(true);
-      try {
-        await cam.start();
-        setStep(1);
-      } catch (e) {
-        camRef.current?.stop();
-        toast.error(e instanceof Error ? e.message : "Could not open camera");
-        setGps(null);
-        void gpsPromise.catch(() => {});
-        return;
-      } finally {
-        setBusy(false);
-      }
-      try {
-        const g = await gpsPromise;
-        setGps(g);
-      } catch (e) {
-        camRef.current?.stop();
-        toast.error(e instanceof Error ? e.message : "Could not get location");
-        setGps(null);
-        setStep(0);
-      }
-      return;
-    }
+    if (step === 0) return;
 
     if (step === 1) {
       if (!streamReady) return;
       setBusy(true);
       try {
+        const gpsPromise = getGpsFix();
         await camRef.current?.capture();
+        const g = await gpsPromise;
+        setGps(g);
+      } catch (e) {
+        toast.error(e instanceof Error ? e.message : "Could not get location");
+        setGps(null);
       } finally {
         setBusy(false);
       }
@@ -320,14 +321,14 @@ export function EmployeeSiteSwitchPanel({
 
   const primaryDisabled =
     busy ||
-    (step === 1 && (!streamReady || !gps)) ||
+    (step === 1 && !streamReady) ||
     (step === 2 && (!gps || !selfie));
 
   const primaryHint =
     step === 0
-      ? "Tap once to capture location and open the camera (at your new site)."
+      ? "Select new site to open camera."
       : step === 1
-        ? "Tap again to take your selfie."
+        ? "Tap to capture selfie (GPS captured now)."
         : "Tap again to confirm switch — records check-out from your current site, not end-of-day.";
 
   const otherSites = sites.filter((s) => s.id !== currentSiteId);
@@ -384,13 +385,6 @@ export function EmployeeSiteSwitchPanel({
           onRefreshSites={loadSites}
           showCustomSiteButton
         />
-
-        {isAdminLike && gps ? (
-          <p className="text-xs font-mono text-zinc-500">
-            Admin debug: {gps.latitude.toFixed(6)}, {gps.longitude.toFixed(6)}
-            {gps.accuracyM != null && ` (±${Math.round(gps.accuracyM)}m)`}
-          </p>
-        ) : null}
 
         <div className="space-y-2">
           <p className="text-xs text-zinc-500">Camera</p>
@@ -453,8 +447,8 @@ export function EmployeeSiteSwitchPanel({
                 : step === 1
                   ? "Capturing…"
                   : "Submitting…"
-              : step === 1 && !gps
-                ? "Getting location…"
+              : step === 1
+                ? "Capture"
                 : "Submit site switch"}
           </Button>
           <p className="text-xs text-zinc-500">{primaryHint}</p>
@@ -471,22 +465,22 @@ export function EmployeeSiteSwitchPanel({
         aria-controls="employee-site-switch-panel"
         onClick={() => setExpanded((e) => !e)}
         className={cn(
-          "flex w-full items-center justify-between gap-3 rounded-xl border border-white/10 bg-white/[0.03] px-4 py-3 text-left transition-colors hover:border-cyan-500/30 hover:bg-white/[0.05] dark:bg-white/[0.03]",
+          "flex w-full items-center justify-between gap-3 rounded-xl border border-zinc-200/90 bg-zinc-50 px-4 py-3 text-left text-zinc-900 transition-colors hover:border-cyan-500/40 hover:bg-zinc-100 dark:border-white/10 dark:bg-white/[0.03] dark:text-zinc-100 dark:hover:bg-white/[0.05]",
           expanded && "rounded-b-none border-b-transparent"
         )}
       >
         <div className="min-w-0">
-          <span className="text-sm font-semibold tracking-wide text-zinc-200">Switch</span>
+          <span className="text-sm font-semibold tracking-wide">Switch</span>
           {sessionOpen && currentSiteId ? (
             <p className="mt-0.5 truncate text-xs text-zinc-500">
               At “{siteNames[currentSiteId] ?? currentSiteId}”
             </p>
           ) : (
-            <p className="mt-0.5 text-xs text-zinc-500">Move to another site (after check-in)</p>
+            <p className="mt-0.5 text-xs text-zinc-500 dark:text-zinc-500">Move to another site (after check-in)</p>
           )}
         </div>
         <span
-          className="flex size-9 shrink-0 items-center justify-center rounded-lg border border-white/15 bg-black/30 text-lg font-light leading-none text-zinc-200"
+          className="flex size-9 shrink-0 items-center justify-center rounded-lg border border-zinc-300 bg-white text-lg font-light leading-none text-zinc-700 dark:border-white/15 dark:bg-black/30 dark:text-zinc-200"
           aria-hidden
         >
           {expanded ? "−" : "+"}

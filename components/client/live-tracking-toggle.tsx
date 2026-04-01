@@ -2,6 +2,7 @@
 
 import * as React from "react";
 import { LiveTrackingPing } from "@/components/client/live-tracking-ping";
+import { useDashboardUser } from "@/components/client/dashboard-user-context";
 import {
   Card,
   CardContent,
@@ -11,7 +12,9 @@ import {
 } from "@/components/ui/card";
 
 export function LiveTrackingToggle() {
+  const { user } = useDashboardUser();
   const [on, setOn] = React.useState(true);
+  const lockedForEmployee = user?.role === "employee";
 
   return (
     <Card>
@@ -27,9 +30,10 @@ export function LiveTrackingToggle() {
             type="checkbox"
             className="size-4 accent-cyan-500"
             checked={on}
+            disabled={lockedForEmployee}
             onChange={(e) => setOn(e.target.checked)}
           />
-          Enable pings
+          Enable pings {lockedForEmployee ? "(locked for employees)" : ""}
         </label>
       </CardContent>
       <LiveTrackingPing enabled={on} />

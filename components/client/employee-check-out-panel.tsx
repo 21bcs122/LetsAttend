@@ -16,25 +16,28 @@ import {
   useResetCaptureWhenSiteChanges,
   useRetakeSelfieCamera,
 } from "@/components/client/selfie-preview-with-retake";
-import { useDashboardUser } from "@/components/client/dashboard-user-context";
 import { OutOfSiteRadiusAlert } from "@/components/client/out-of-site-radius-alert";
 import { ResultModal } from "@/components/client/feedback-modals";
 import { getGpsFix, type GpsResult } from "@/lib/client/geolocation";
 import { toast } from "sonner";
 import { getFirebaseAuth } from "@/lib/firebase/client";
 import { SiteSelectWithCustomRow } from "@/components/client/site-select-with-custom-row";
+import { calendarDateKeyInTimeZone } from "@/lib/date/calendar-day-key";
+import { normalizeTimeZoneId } from "@/lib/date/time-zone";
 
 type Site = { id: string; name?: string };
 
 type RadiusErr = { distanceM: number; radiusM: number };
 
 type FlowStep = 0 | 1 | 2;
+type TodayPayload = {
+  siteId: string | null;
+  checkIn: { atMs: number | null } | null;
+  checkOut: { atMs: number | null } | null;
+  error?: string;
+};
 
 export function EmployeeCheckOutPanel({ proxyForUid }: { proxyForUid?: string } = {}) {
-  const { user } = useDashboardUser();
-  const isAdminLike =
-    user?.role === "admin" || user?.role === "super_admin";
-
   const [sites, setSites] = React.useState<Site[]>([]);
   const [siteId, setSiteId] = React.useState("");
   const [gps, setGps] = React.useState<GpsResult | null>(null);
@@ -45,6 +48,8 @@ export function EmployeeCheckOutPanel({ proxyForUid }: { proxyForUid?: string } 
   const [radiusError, setRadiusError] = React.useState<RadiusErr | null>(null);
   const [busy, setBusy] = React.useState(false);
   const camRef = React.useRef<CameraCaptureHandle>(null);
+  const [activeSiteId, setActiveSiteId] = React.useState<string | null>(null);
+  const displayTz = normalizeTimeZoneId(undefined);
 
   const authHeaders = React.useCallback(async () => {
     const auth = getFirebaseAuth();
@@ -82,6 +87,35 @@ export function EmployeeCheckOutPanel({ proxyForUid }: { proxyForUid?: string } 
   }, [loadSites]);
 
   React.useEffect(() => {
+    if (proxyForUid) return;
+    let cancelled = false;
+    const run = async () => {
+      try {
+        const auth = getFirebaseAuth();
+        const u = auth.currentUser;
+        if (!u) return;
+        const token = await u.getIdToken();
+        const day = calendarDateKeyInTimeZone(new Date(), displayTz);
+        const res = await fetch(`/api/attendance/today?day=${encodeURIComponent(day)}`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        const data = (await res.json()) as TodayPayload;
+        if (!res.ok || cancelled) return;
+        const open = !!data.checkIn && !data.checkOut;
+        const sid = open ? data.siteId ?? null : null;
+        setActiveSiteId(sid);
+        if (sid) setSiteId(sid);
+      } catch {
+        /* ignore */
+      }
+    };
+    void run();
+    return () => {
+      cancelled = true;
+    };
+  }, [displayTz, proxyForUid]);
+
+  React.useEffect(() => {
     if (step === 0) setStreamReady(false);
   }, [step]);
 
@@ -103,6 +137,33 @@ export function EmployeeCheckOutPanel({ proxyForUid }: { proxyForUid?: string } 
     setStep,
     setStreamReady,
   });
+
+  const startCaptureFlow = React.useCallback(async () => {
+    if (!siteId || busy || step !== 0) return;
+    setRadiusError(null);
+    setStreamReady(false);
+    const cam = camRef.current;
+    if (!cam) {
+      toast.error("Camera not ready");
+      return;
+    }
+    setBusy(true);
+    try {
+      await cam.start();
+      setStep(1);
+    } catch (e) {
+      camRef.current?.stop();
+      toast.error(e instanceof Error ? e.message : "Could not open camera");
+      return;
+    } finally {
+      setBusy(false);
+    }
+  }, [busy, siteId, step]);
+
+  React.useEffect(() => {
+    if (!siteId) return;
+    void startCaptureFlow();
+  }, [siteId, startCaptureFlow]);
 
   const uploadSelfie = async (dataUrl: string) => {
     const h = await authHeaders();
@@ -160,6 +221,7 @@ export function EmployeeCheckOutPanel({ proxyForUid }: { proxyForUid?: string } 
       setSuccessFeedback(true);
       setRadiusError(null);
       resetCaptureFlow();
+      window.dispatchEvent(new Event("attendance-updated"));
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Check-out failed");
     } finally {
@@ -174,44 +236,19 @@ export function EmployeeCheckOutPanel({ proxyForUid }: { proxyForUid?: string } 
       return;
     }
 
-    if (step === 0) {
-      setStreamReady(false);
-      const cam = camRef.current;
-      if (!cam) {
-        toast.error("Camera not ready");
-        return;
-      }
-      const gpsPromise = getGpsFix();
-      setBusy(true);
-      try {
-        await cam.start();
-        setStep(1);
-      } catch (e) {
-        camRef.current?.stop();
-        toast.error(e instanceof Error ? e.message : "Could not open camera");
-        setGps(null);
-        void gpsPromise.catch(() => {});
-        return;
-      } finally {
-        setBusy(false);
-      }
-      try {
-        const g = await gpsPromise;
-        setGps(g);
-      } catch (e) {
-        camRef.current?.stop();
-        toast.error(e instanceof Error ? e.message : "Could not get location");
-        setGps(null);
-        setStep(0);
-      }
-      return;
-    }
+    if (step === 0) return;
 
     if (step === 1) {
       if (!streamReady) return;
       setBusy(true);
       try {
+        const gpsPromise = getGpsFix();
         await camRef.current?.capture();
+        const g = await gpsPromise;
+        setGps(g);
+      } catch (e) {
+        toast.error(e instanceof Error ? e.message : "Could not get location");
+        setGps(null);
       } finally {
         setBusy(false);
       }
@@ -225,14 +262,14 @@ export function EmployeeCheckOutPanel({ proxyForUid }: { proxyForUid?: string } 
 
   const primaryDisabled =
     busy ||
-    (step === 1 && (!streamReady || !gps)) ||
+    (step === 1 && !streamReady) ||
     (step === 2 && (!gps || !selfie));
 
   const primaryHint =
     step === 0
-      ? "Tap once to capture location and open the camera."
+      ? "Select site to open camera."
       : step === 1
-        ? "Tap again to take your selfie."
+        ? "Tap to capture selfie (GPS captured now)."
         : "Tap again to send check-out.";
 
   return (
@@ -247,7 +284,8 @@ export function EmployeeCheckOutPanel({ proxyForUid }: { proxyForUid?: string } 
             </>
           ) : (
             <>
-              Same three-tap flow as check-in. Pick the site you are finishing at (your current segment).
+              Pick the site you are finishing at. Camera opens after site selection.
+              GPS is captured when you click picture.
               No &ldquo;Custom site&rdquo; here — check-out is only at an existing location you already opened
               today.
             </>
@@ -262,14 +300,8 @@ export function EmployeeCheckOutPanel({ proxyForUid }: { proxyForUid?: string } 
           onChange={setSiteId}
           onRefreshSites={loadSites}
           showCustomSiteButton={false}
+          selectDisabled={!!activeSiteId}
         />
-
-        {isAdminLike && gps ? (
-          <p className="text-xs font-mono text-zinc-500">
-            Admin debug: {gps.latitude.toFixed(6)}, {gps.longitude.toFixed(6)}
-            {gps.accuracyM != null && ` (±${Math.round(gps.accuracyM)}m)`}
-          </p>
-        ) : null}
 
         <div className="space-y-2">
           <p className="text-xs text-zinc-500">Camera</p>
@@ -325,8 +357,8 @@ export function EmployeeCheckOutPanel({ proxyForUid }: { proxyForUid?: string } 
                 : step === 1
                   ? "Capturing…"
                   : "Submitting…"
-              : step === 1 && !gps
-                ? "Getting location…"
+              : step === 1
+                ? "Capture"
                 : "Submit check-out"}
           </Button>
           <p className="text-xs text-zinc-500">{primaryHint}</p>

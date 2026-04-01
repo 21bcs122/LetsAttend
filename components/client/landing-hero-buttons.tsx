@@ -10,11 +10,18 @@ import {
   LayoutDashboard,
   LogIn,
   LogOut,
+  Menu,
   Sparkles,
 } from "lucide-react";
 import { getFirebaseAuth } from "@/lib/firebase/client";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
 const actionBtn =
   "min-h-11 min-w-[9.5rem] justify-center gap-2 font-semibold tracking-tight md:min-w-[10.25rem]";
@@ -39,23 +46,33 @@ export function LandingHeroButtons() {
             </Link>
           </Button>
           <Button asChild size="lg" variant="outline" className={actionBtn}>
-            <Link href="/dashboard/employee#employee-site-switch">
-              <ArrowRightLeft className="size-[1.05rem]" aria-hidden />
-              Switch site
-            </Link>
-          </Button>
-          <Button asChild size="lg" variant="outline" className={actionBtn}>
             <Link href="/dashboard/employee#employee-check-out">
               <LogOut className="size-[1.05rem]" aria-hidden />
               Check out
             </Link>
           </Button>
-          <Button asChild size="lg" variant="outline" className={actionBtn}>
-            <Link href="/dashboard/employee/overtime">
-              <Clock className="size-[1.05rem]" aria-hidden />
-              Overtime
-            </Link>
-          </Button>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button size="lg" variant="outline" className={actionBtn}>
+                <Menu className="size-[1.05rem]" aria-hidden />
+                Others
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="center" className="w-52">
+              <DropdownMenuItem asChild>
+                <Link href="/dashboard/employee/overtime" className="flex items-center gap-2">
+                  <Clock className="size-4" aria-hidden />
+                  Overtime
+                </Link>
+              </DropdownMenuItem>
+              <DropdownMenuItem asChild>
+                <Link href="/dashboard/employee#employee-site-switch" className="flex items-center gap-2">
+                  <ArrowRightLeft className="size-4" aria-hidden />
+                  Switch site
+                </Link>
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
         <Button
           asChild
