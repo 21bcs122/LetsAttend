@@ -17,6 +17,8 @@ import { toast } from "sonner";
 import { DEFAULT_ATTENDANCE_TIME_ZONE } from "@/lib/date/time-zone";
 import { formatInstantDateTime12hInZone, formatWallHm12h } from "@/lib/time/format-wall-time";
 import { UtcTimePicker } from "@/components/client/utc-time-picker";
+import { useCalendarMode } from "@/components/client/calendar-mode-context";
+import { formatIsoForCalendar } from "@/lib/date/bs-calendar";
 
 type Row = {
   id: string;
@@ -58,6 +60,7 @@ function fmtGps(g: Row["requestGps"]) {
 type DraftTimes = { start: string; end: string };
 
 export default function AdminOffsitePage() {
+  const { mode } = useCalendarMode();
   const [items, setItems] = React.useState<Row[]>([]);
   const [loading, setLoading] = React.useState(true);
   const [filter, setFilter] = React.useState<"all" | "pending" | "approved" | "rejected">("pending");
@@ -316,7 +319,7 @@ export default function AdminOffsitePage() {
                       <dl className="mt-3 grid gap-1 text-xs text-zinc-400">
                         <div>
                           <span className="text-zinc-500">Date: </span>
-                          {r.date ?? "—"}
+                          {r.date ? formatIsoForCalendar(r.date, mode) : "—"}
                         </div>
                         <div>
                           <span className="text-zinc-500">Assignee: </span>

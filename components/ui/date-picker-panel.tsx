@@ -7,8 +7,10 @@ import { useCalendarMode } from "@/components/client/calendar-mode-context";
 import {
   adIsoToBsIso,
   bsIsoToAdIso,
+  bsMonthDays,
   dayNumberForMode,
-  monthLabelForMode,
+  BS_MONTHS,
+  type CalendarMode,
 } from "@/lib/date/bs-calendar";
 import { calendarDateKeyInTimeZone } from "@/lib/date/calendar-day-key";
 import { normalizeTimeZoneId } from "@/lib/date/time-zone";
@@ -23,49 +25,97 @@ import {
 
 const WEEKDAYS = ["S", "M", "T", "W", "T", "F", "S"] as const;
 
-function parseMonthAnchor(iso: string | undefined, tz: string): DateTime {
-  if (iso && /^\d{4}-\d{2}-\d{2}$/.test(iso.trim())) {
-    const d = DateTime.fromFormat(iso.trim(), "yyyy-LL-dd", { zone: tz });
-    if (d.isValid) return d.startOf("month");
+function parseMonthAnchor(iso: string | undefined, tz: string, mode: CalendarMode): string {
+  const d = iso && /^\d{4}-\d{2}-\d{2}$/.test(iso.trim()) 
+    ? DateTime.fromFormat(iso.trim(), "yyyy-LL-dd", { zone: tz })
+    : DateTime.now().setZone(tz);
+  const dt = d.isValid ? d : DateTime.now().setZone(tz);
+
+  if (mode === "ad") {
+    return dt.startOf("month").toISODate()!;
   }
-  return DateTime.now().setZone(tz).startOf("month");
+  const bs = adIsoToBsIso(dt.toISODate()!);
+  const [y, m] = bs.split("-").map(Number);
+  return bsIsoToAdIso(`${y}-${String(m).padStart(2, "0")}-01`);
 }
 
 type Cell = { iso: string; day: number; inMonth: boolean };
 
-function buildMonthGrid(anchor: DateTime, tz: string): Cell[] {
-  const monthStart = anchor.startOf("month");
-  const pad = monthStart.weekday % 7;
-  const cells: Cell[] = [];
-  for (let i = pad; i > 0; i--) {
-    const d = monthStart.minus({ days: i }).setZone(tz);
-    cells.push({
-      iso: d.toFormat("yyyy-LL-dd"),
-      day: d.day,
-      inMonth: false,
-    });
+function buildMonthGrid(anchorIso: string, tz: string, mode: CalendarMode): Cell[] {
+  if (mode === "ad") {
+    const monthStart = DateTime.fromISO(anchorIso, { zone: tz }).startOf("month");
+    const pad = monthStart.weekday % 7;
+    const cells: Cell[] = [];
+    for (let i = pad; i > 0; i--) {
+      const d = monthStart.minus({ days: i }).setZone(tz);
+      cells.push({
+        iso: d.toFormat("yyyy-LL-dd"),
+        day: d.day,
+        inMonth: false,
+      });
+    }
+    const dim = monthStart.daysInMonth ?? 31;
+    for (let day = 1; day <= dim; day++) {
+      const d = monthStart.set({ day });
+      cells.push({
+        iso: d.toFormat("yyyy-LL-dd"),
+        day,
+        inMonth: true,
+      });
+    }
+    while (cells.length % 7 !== 0) {
+      const lastIso = cells[cells.length - 1]!.iso;
+      const last = DateTime.fromFormat(lastIso, "yyyy-LL-dd", { zone: tz }).plus({
+        days: 1,
+      });
+      cells.push({
+        iso: last.toFormat("yyyy-LL-dd"),
+        day: last.day,
+        inMonth: false,
+      });
+    }
+    return cells;
+  } else {
+    const bsStr = adIsoToBsIso(anchorIso);
+    const [bsY, bsM] = bsStr.split("-").map(Number);
+    const firstAdIso = bsIsoToAdIso(`${bsY}-${String(bsM).padStart(2, "0")}-01`);
+    const firstAd = DateTime.fromISO(firstAdIso, { zone: tz });
+    
+    const padDays = firstAd.weekday % 7;
+    const cells: Cell[] = [];
+    
+    for (let i = padDays; i > 0; i--) {
+      const d = firstAd.minus({ days: i });
+      cells.push({
+        iso: d.toFormat("yyyy-LL-dd"),
+        day: d.day,
+        inMonth: false,
+      });
+    }
+    
+    const daysInMonth = bsMonthDays(bsY, bsM);
+    for (let day = 1; day <= daysInMonth; day++) {
+      const adIso = bsIsoToAdIso(`${bsY}-${String(bsM).padStart(2, "0")}-${String(day).padStart(2, "0")}`);
+      cells.push({
+        iso: adIso,
+        day,
+        inMonth: true,
+      });
+    }
+    
+    while (cells.length % 7 !== 0) {
+      const lastIso = cells[cells.length - 1]!.iso;
+      const last = DateTime.fromFormat(lastIso, "yyyy-LL-dd", { zone: tz }).plus({
+        days: 1,
+      });
+      cells.push({
+        iso: last.toFormat("yyyy-LL-dd"),
+        day: last.day,
+        inMonth: false,
+      });
+    }
+    return cells;
   }
-  const dim = monthStart.daysInMonth ?? 31;
-  for (let day = 1; day <= dim; day++) {
-    const d = monthStart.set({ day });
-    cells.push({
-      iso: d.toFormat("yyyy-LL-dd"),
-      day,
-      inMonth: true,
-    });
-  }
-  while (cells.length % 7 !== 0) {
-    const lastIso = cells[cells.length - 1]!.iso;
-    const last = DateTime.fromFormat(lastIso, "yyyy-LL-dd", { zone: tz }).plus({
-      days: 1,
-    });
-    cells.push({
-      iso: last.toFormat("yyyy-LL-dd"),
-      day: last.day,
-      inMonth: false,
-    });
-  }
-  return cells;
 }
 
 const MONTH_NAMES = [
@@ -83,18 +133,11 @@ const MONTH_NAMES = [
   "December",
 ] as const;
 
-function bsYearMonthFromAnchor(anchor: DateTime): { bsYear: number; bsMonth: number } | null {
-  const bs = adIsoToBsIso(anchor.toFormat("yyyy-MM-dd"));
+function bsYearMonthFromAnchor(anchorIso: string): { bsYear: number; bsMonth: number } | null {
+  const bs = adIsoToBsIso(anchorIso);
   const [y, m] = bs.split("-").map(Number);
   if (!Number.isFinite(y) || !Number.isFinite(m)) return null;
   return { bsYear: y, bsMonth: m };
-}
-
-function adAnchorFromBsYearMonth(bsYear: number, bsMonth: number, tz: string): DateTime {
-  const bsIso = `${String(bsYear).padStart(4, "0")}-${String(bsMonth).padStart(2, "0")}-01`;
-  const adIso = bsIsoToAdIso(bsIso);
-  const ad = DateTime.fromISO(adIso, { zone: tz });
-  return ad.isValid ? ad.startOf("month") : DateTime.now().setZone(tz).startOf("month");
 }
 
 export type DatePickerPanelProps = {
@@ -113,36 +156,65 @@ export function DatePickerPanel({
 }: DatePickerPanelProps) {
   const tz = normalizeTimeZoneId(timeZoneProp);
   const { mode } = useCalendarMode();
-  const [viewMonth, setViewMonth] = React.useState(() =>
-    parseMonthAnchor(selectedIso, tz)
+  const [viewIsoAnchor, setViewIsoAnchor] = React.useState(() =>
+    parseMonthAnchor(selectedIso, tz, mode)
   );
 
   React.useEffect(() => {
-    setViewMonth(parseMonthAnchor(selectedIso, tz));
-  }, [selectedIso, tz]);
+    setViewIsoAnchor(parseMonthAnchor(selectedIso, tz, mode));
+  }, [selectedIso, tz, mode]);
 
   const todayIso = React.useMemo(
     () => calendarDateKeyInTimeZone(new Date(), tz),
     [tz]
   );
 
-  const grid = React.useMemo(() => buildMonthGrid(viewMonth, tz), [viewMonth, tz]);
+  const grid = React.useMemo(() => buildMonthGrid(viewIsoAnchor, tz, mode), [viewIsoAnchor, tz, mode]);
 
-  const title = monthLabelForMode(viewMonth.year, viewMonth.month, mode);
+  const title = React.useMemo(() => {
+    if (mode === "ad") return DateTime.fromISO(viewIsoAnchor, { zone: tz }).toFormat("LLLL yyyy");
+    const bs = adIsoToBsIso(viewIsoAnchor);
+    const [y, m] = bs.split("-").map(Number);
+    return `${BS_MONTHS[m - 1] ?? "Unknown"} ${y} BS`;
+  }, [viewIsoAnchor, mode, tz]);
 
-  const goPrevMonth = () => setViewMonth((m) => m.minus({ months: 1 }).startOf("month"));
-  const goNextMonth = () => setViewMonth((m) => m.plus({ months: 1 }).startOf("month"));
+  const goPrevMonth = () => {
+    setViewIsoAnchor((prev) => {
+      if (mode === "ad") {
+        return DateTime.fromISO(prev).minus({ months: 1 }).startOf("month").toISODate()!;
+      }
+      const bsStr = adIsoToBsIso(prev);
+      const [y, m] = bsStr.split("-").map(Number);
+      const prevM = m === 1 ? 12 : m - 1;
+      const prevY = m === 1 ? y - 1 : y;
+      return bsIsoToAdIso(`${prevY}-${String(prevM).padStart(2, "0")}-01`);
+    });
+  };
 
-  const bsCurrent = bsYearMonthFromAnchor(viewMonth);
-  const year = mode === "bs" ? (bsCurrent?.bsYear ?? viewMonth.year) : viewMonth.year;
+  const goNextMonth = () => {
+    setViewIsoAnchor((prev) => {
+      if (mode === "ad") {
+        return DateTime.fromISO(prev).plus({ months: 1 }).startOf("month").toISODate()!;
+      }
+      const bsStr = adIsoToBsIso(prev);
+      const [y, m] = bsStr.split("-").map(Number);
+      const nextM = m === 12 ? 1 : m + 1;
+      const nextY = m === 12 ? y + 1 : y;
+      return bsIsoToAdIso(`${nextY}-${String(nextM).padStart(2, "0")}-01`);
+    });
+  };
+
+  const bsCurrent = mode === "bs" ? bsYearMonthFromAnchor(viewIsoAnchor) : null;
+  const year = mode === "bs" ? (bsCurrent?.bsYear ?? 2080) : DateTime.fromISO(viewIsoAnchor).year;
+
   const setYear = (y: number) => {
     if (mode === "bs") {
-      const bsCurrent = bsYearMonthFromAnchor(viewMonth);
-      const next = adAnchorFromBsYearMonth(y, bsCurrent?.bsMonth ?? 1, tz);
-      setViewMonth(next);
+      const bsCurrent = bsYearMonthFromAnchor(viewIsoAnchor);
+      const m = bsCurrent?.bsMonth ?? 1;
+      setViewIsoAnchor(bsIsoToAdIso(`${y}-${String(m).padStart(2, "0")}-01`));
       return;
     }
-    setViewMonth(viewMonth.set({ year: y }).startOf("month"));
+    setViewIsoAnchor(DateTime.fromISO(viewIsoAnchor).set({ year: y }).startOf("month").toISODate()!);
   };
 
   const years = React.useMemo(() => {
@@ -176,28 +248,23 @@ export function DatePickerPanel({
             </button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="start" className="max-h-[min(70vh,22rem)] w-[min(calc(100vw-2rem),14rem)] overflow-y-auto">
-            {MONTH_NAMES.map((name, idx) => {
+            {(mode === "bs" ? BS_MONTHS : MONTH_NAMES).map((name, idx) => {
               const m = idx + 1;
-              const isCurrent = mode === "bs" ? bsCurrent?.bsMonth === m : viewMonth.month === m;
-              const monthText =
-                mode === "bs"
-                  ? monthLabelForMode(viewMonth.year, m, "bs").replace(/\s+\d{4}\s+BS$/, "")
-                  : name;
+              const isCurrent = mode === "bs" ? bsCurrent?.bsMonth === m : DateTime.fromISO(viewIsoAnchor).month === m;
               return (
                 <DropdownMenuItem
                   key={name}
                   className={cn(isCurrent && "bg-cyan-500/15 text-cyan-200")}
                   onSelect={() => {
                     if (mode === "bs") {
-                      const bs = bsYearMonthFromAnchor(viewMonth);
-                      const next = adAnchorFromBsYearMonth(bs?.bsYear ?? viewMonth.year, m, tz);
-                      setViewMonth(next);
+                      const y = bsCurrent?.bsYear ?? 2080;
+                      setViewIsoAnchor(bsIsoToAdIso(`${y}-${String(m).padStart(2, "0")}-01`));
                       return;
                     }
-                    setViewMonth(viewMonth.set({ month: m }).startOf("month"));
+                    setViewIsoAnchor(DateTime.fromISO(viewIsoAnchor).set({ month: m }).startOf("month").toISODate()!);
                   }}
                 >
-                  {monthText}
+                  {name}
                 </DropdownMenuItem>
               );
             })}

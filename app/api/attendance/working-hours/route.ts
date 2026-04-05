@@ -10,6 +10,7 @@ export const runtime = "nodejs";
 
 const querySchema = z.object({
   month: z.string().regex(/^\d{4}-\d{2}$/),
+  mode: z.enum(["ad", "bs"]).optional(),
   workerId: z.string().min(1).optional(),
 });
 
@@ -20,6 +21,7 @@ export async function GET(req: Request) {
   const url = new URL(req.url);
   const parsed = querySchema.safeParse({
     month: url.searchParams.get("month") ?? "",
+    mode: url.searchParams.get("mode") || undefined,
     workerId: url.searchParams.get("workerId")?.trim() || undefined,
   });
   if (!parsed.success) {
@@ -36,7 +38,8 @@ export async function GET(req: Request) {
     const payload = await buildWorkerMonthWorkingHours(
       adminDb(),
       targetWorkerId,
-      parsed.data.month
+      parsed.data.month,
+      parsed.data.mode || "ad"
     );
     return NextResponse.json(payload);
   } catch (e) {

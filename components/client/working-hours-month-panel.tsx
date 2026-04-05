@@ -23,7 +23,7 @@ import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 import { useDashboardUser } from "@/components/client/dashboard-user-context";
 import { useCalendarMode } from "@/components/client/calendar-mode-context";
-import { formatIsoForCalendar, monthLabelForMode } from "@/lib/date/bs-calendar";
+import { formatIsoForCalendar, monthLabelForModeYm, convertMonthMode, currentMonthYyyyMmForMode, adIsoToBsIso } from "@/lib/date/bs-calendar";
 
 type DayRow = {
   day: string;
@@ -60,9 +60,7 @@ function fmtHr(h: number): string {
   return `${h.toFixed(2)}`;
 }
 
-function currentMonthYyyyMm(zone: string): string {
-  return DateTime.now().setZone(zone).toFormat("yyyy-MM");
-}
+
 
 function kindLabel(kind: Payload["entries"][number]["kind"]): string {
   if (kind === "on_site") return "On-site";
@@ -77,32 +75,56 @@ export function WorkingHoursMonthPanel({
   workerId?: string;
 }) {
   const zone = DEFAULT_ATTENDANCE_TIME_ZONE;
-  const [month, setMonth] = React.useState(() => currentMonthYyyyMm(zone));
+  const { mode } = useCalendarMode();
+  const { user: viewer } = useDashboardUser();
+  const canEdit = viewer?.role === "admin" || viewer?.role === "super_admin";
+
+  const [month, setMonth] = React.useState(() => currentMonthYyyyMmForMode(mode, zone));
   const [data, setData] = React.useState<Payload | null>(null);
   const [loading, setLoading] = React.useState(false);
   const [edits, setEdits] = React.useState<
     Record<string, { inTime: string; outTime: string; dutyHours: string; workPlace: string; remark: string }>
   >({});
-  const [year, setYear] = React.useState(() => DateTime.now().setZone(zone).year);
+  const [year, setYear] = React.useState(() => {
+    const current = currentMonthYyyyMmForMode(mode, zone);
+    return Number(current.split("-")[0]) || DateTime.now().setZone(zone).year;
+  });
   const [periodOpen, setPeriodOpen] = React.useState(false);
   const [periodMode, setPeriodMode] = React.useState<"year" | "range">("year");
-  const [periodYear, setPeriodYear] = React.useState(() => DateTime.now().setZone(zone).year);
-  const [periodStartMonth, setPeriodStartMonth] = React.useState(() => currentMonthYyyyMm(zone));
-  const [periodEndMonth, setPeriodEndMonth] = React.useState(() => currentMonthYyyyMm(zone));
+  const [periodYear, setPeriodYear] = React.useState(() => {
+    const current = currentMonthYyyyMmForMode(mode, zone);
+    return Number(current.split("-")[0]) || DateTime.now().setZone(zone).year;
+  });
+  const [periodStartMonth, setPeriodStartMonth] = React.useState(() => currentMonthYyyyMmForMode(mode, zone));
+  const [periodEndMonth, setPeriodEndMonth] = React.useState(() => currentMonthYyyyMmForMode(mode, zone));
   const [mounted, setMounted] = React.useState(false);
   const [downloading, setDownloading] = React.useState(false);
-  const { user: viewer } = useDashboardUser();
-  const { mode } = useCalendarMode();
-  const canEdit = viewer?.role === "admin" || viewer?.role === "super_admin";
+
+  const prevModeRef = React.useRef(mode);
+
+  React.useEffect(() => {
+    if (prevModeRef.current !== mode) {
+      setMonth(prev => convertMonthMode(prev, prevModeRef.current, mode));
+      setPeriodStartMonth(prev => convertMonthMode(prev, prevModeRef.current, mode));
+      setPeriodEndMonth(prev => convertMonthMode(prev, prevModeRef.current, mode));
+      prevModeRef.current = mode;
+    }
+  }, [mode]);
+
   const monthOptions = React.useMemo(() => {
     const now = DateTime.now().setZone(zone);
-    const startYear = 2020;
-    const endYear = now.year + 1;
+    let startYear = 2020;
+    let endYear = now.year + 1;
+    if (mode === "bs") {
+       const bsNow = adIsoToBsIso(now.toISODate()!).split("-").map(Number);
+       startYear = 2077;
+       endYear = bsNow[0]! + 1;
+    }
     const out: Array<{ value: string; label: string }> = [];
     for (let y = endYear; y >= startYear; y--) {
       for (let m = 12; m >= 1; m--) {
-        const value = DateTime.fromObject({ year: y, month: m, day: 1 }, { zone }).toFormat("yyyy-MM");
-        out.push({ value, label: monthLabelForMode(y, m, mode) });
+        const value = `${String(y).padStart(4,"0")}-${String(m).padStart(2,"0")}`;
+        out.push({ value, label: monthLabelForModeYm(y, m, mode) });
       }
     }
     return out;
@@ -115,7 +137,7 @@ export function WorkingHoursMonthPanel({
       const u = auth.currentUser;
       if (!u) throw new Error("Not signed in");
       const token = await u.getIdToken();
-      const q = new URLSearchParams({ month });
+      const q = new URLSearchParams({ month, mode });
       if (workerId) q.set("workerId", workerId);
       const res = await fetch(`/api/attendance/working-hours?${q}`, {
         headers: { Authorization: `Bearer ${token}` },
@@ -144,9 +166,12 @@ export function WorkingHoursMonthPanel({
   }, []);
 
   const titleMonth = React.useMemo(() => {
-    const dt = DateTime.fromFormat(month, "yyyy-MM", { zone });
-    return dt.isValid ? monthLabelForMode(dt.year, dt.month, mode) : month;
-  }, [mode, month, zone]);
+    const dt = month.split("-").map(Number);
+    if (dt.length === 2 && Number.isFinite(dt[0]) && Number.isFinite(dt[1])) {
+      return monthLabelForModeYm(dt[0]!, dt[1]!, mode);
+    }
+    return month;
+  }, [mode, month]);
 
   const mergedRows = React.useMemo(() => {
     if (!data) return [];
@@ -253,10 +278,11 @@ export function WorkingHoursMonthPanel({
     for (let i = 0; i < list.length; i++) {
       const p = list[i]!;
       if (i > 0) doc.addPage("a4");
-      const pMonth = DateTime.fromFormat(p.month, "yyyy-MM", { zone: p.zone });
-      const monthLabel = pMonth.isValid
-        ? monthLabelForMode(pMonth.year, pMonth.month, mode)
-        : p.month;
+      const pMonthParts = p.month.split("-").map(Number);
+      const monthLabel =
+        pMonthParts.length === 2 && Number.isFinite(pMonthParts[0]) && Number.isFinite(pMonthParts[1])
+          ? monthLabelForModeYm(pMonthParts[0]!, pMonthParts[1]!, mode)
+          : p.month;
       const startY = drawHeader(monthLabel);
       const tableRows: Array<[string, string, string, string, string, string, string, string]> = p.entries.map((r) => [
             mode === "bs" ? formatIsoForCalendar(r.day, "bs", p.zone) : r.day,
@@ -334,11 +360,11 @@ export function WorkingHoursMonthPanel({
       if (!u) throw new Error("Not signed in");
       const token = await u.getIdToken();
       const months = Array.from({ length: 12 }, (_, i) =>
-        DateTime.fromObject({ year, month: i + 1, day: 1 }, { zone }).toFormat("yyyy-MM")
+        `${String(year).padStart(4, "0")}-${String(i + 1).padStart(2, "0")}`
       );
       const list: Payload[] = [];
       for (const m of months) {
-        const q = new URLSearchParams({ month: m });
+        const q = new URLSearchParams({ month: m, mode });
         if (workerId) q.set("workerId", workerId);
         const res = await fetch(`/api/attendance/working-hours?${q}`, {
           headers: { Authorization: `Bearer ${token}` },
@@ -365,7 +391,7 @@ export function WorkingHoursMonthPanel({
       const months =
         periodMode === "year"
           ? Array.from({ length: 12 }, (_, i) =>
-              DateTime.fromObject({ year: periodYear, month: i + 1, day: 1 }, { zone }).toFormat("yyyy-MM")
+              `${String(periodYear).padStart(4, "0")}-${String(i + 1).padStart(2, "0")}`
             )
           : (() => {
               const s = DateTime.fromFormat(periodStartMonth, "yyyy-MM", { zone });
@@ -382,7 +408,7 @@ export function WorkingHoursMonthPanel({
 
       const list: Payload[] = [];
       for (const m of months) {
-        const q = new URLSearchParams({ month: m });
+        const q = new URLSearchParams({ month: m, mode });
         if (workerId) q.set("workerId", workerId);
         const res = await fetch(`/api/attendance/working-hours?${q}`, {
           headers: { Authorization: `Bearer ${token}` },
@@ -428,7 +454,7 @@ export function WorkingHoursMonthPanel({
               min={2000}
               max={2100}
               value={year}
-              onChange={(e) => setYear(Number(e.target.value || DateTime.now().year))}
+              onChange={(e) => setYear(Number(e.target.value) || new Date().getFullYear())}
               className="ml-2 w-24 rounded-lg border border-zinc-300 bg-white px-2 py-1 text-xs dark:border-white/15 dark:bg-zinc-950"
             />
           </label>
@@ -481,7 +507,7 @@ export function WorkingHoursMonthPanel({
                         min={2000}
                         max={2100}
                         value={periodYear}
-                        onChange={(e) => setPeriodYear(Number(e.target.value || DateTime.now().year))}
+                        onChange={(e) => setPeriodYear(Number(e.target.value) || new Date().getFullYear())}
                         className="w-full rounded-xl border border-white/15 bg-zinc-900 px-3 py-2"
                       />
                     </label>

@@ -16,7 +16,7 @@ import {
 } from "@/components/ui/card";
 import { useDashboardUser } from "@/components/client/dashboard-user-context";
 import { useCalendarMode } from "@/components/client/calendar-mode-context";
-import { dayNumberForMode, monthLabelForMode } from "@/lib/date/bs-calendar";
+import { BS_MONTHS, adIsoToBsIso, bsIsoToAdIso, bsMonthDays, type CalendarMode, dayNumberForMode } from "@/lib/date/bs-calendar";
 import { calendarDateKeyInTimeZone } from "@/lib/date/calendar-day-key";
 import { normalizeTimeZoneId, workTimeZoneUiLabel } from "@/lib/date/time-zone";
 import { cn } from "@/lib/utils";
@@ -39,28 +39,51 @@ function dayKey(y: number, m0: number, d: number) {
 }
 
 function buildMonthGrid(
-  y: number,
-  m0: number,
+  viewIso: string,
+  mode: CalendarMode,
   attended: Set<string>,
   todayKey: string,
   zone: string
 ) {
-  const first = DateTime.fromObject({ year: y, month: m0 + 1, day: 1 }, { zone });
-  const firstDow = first.weekday % 7;
-  const daysInMonth = first.daysInMonth ?? 30;
   const cells: (DayMeta | null)[] = [];
-  for (let i = 0; i < firstDow; i++) cells.push(null);
-  for (let d = 1; d <= daysInMonth; d++) {
-    const key = dayKey(y, m0, d);
-    const present = attended.has(key);
-    const missed = key < todayKey && !present;
-    cells.push({
-      key,
-      day: d,
-      present,
-      missed,
-      isToday: key === todayKey,
-    });
+  if (mode === "ad") {
+    const viewDt = DateTime.fromISO(viewIso, { zone });
+    const first = viewDt.startOf("month");
+    const firstDow = first.weekday % 7;
+    const daysInMonth = first.daysInMonth ?? 30;
+    for (let i = 0; i < firstDow; i++) cells.push(null);
+    for (let d = 1; d <= daysInMonth; d++) {
+      const key = dayKey(viewDt.year, viewDt.month - 1, d);
+      const present = attended.has(key);
+      const missed = key < todayKey && !present;
+      cells.push({
+        key,
+        day: d,
+        present,
+        missed,
+        isToday: key === todayKey,
+      });
+    }
+  } else {
+    const bsStr = adIsoToBsIso(viewIso);
+    const [bsY, bsM] = bsStr.split("-").map(Number);
+    const firstAdIso = bsIsoToAdIso(`${bsY}-${pad(bsM)}-01`);
+    const firstAd = DateTime.fromISO(firstAdIso, { zone });
+    const firstDow = firstAd.weekday % 7;
+    const daysInMonth = bsMonthDays(bsY, bsM);
+    for (let i = 0; i < firstDow; i++) cells.push(null);
+    for (let d = 1; d <= daysInMonth; d++) {
+      const key = bsIsoToAdIso(`${bsY}-${pad(bsM)}-${pad(d)}`);
+      const present = attended.has(key);
+      const missed = key < todayKey && !present;
+      cells.push({
+        key,
+        day: d,
+        present,
+        missed,
+        isToday: key === todayKey,
+      });
+    }
   }
   return cells;
 }
@@ -89,14 +112,20 @@ export function AttendanceCalendar({
   const tz = normalizeTimeZoneId(user?.timeZone);
 
   const nowZ = React.useMemo(() => DateTime.now().setZone(tz), [tz]);
-  const [y, setY] = React.useState(nowZ.year);
-  const [m0, setM0] = React.useState(nowZ.month - 1);
+  const [viewIso, setViewIso] = React.useState(nowZ.startOf("month").toISODate()!);
 
   React.useEffect(() => {
     const n = DateTime.now().setZone(tz);
-    setY(n.year);
-    setM0(n.month - 1);
-  }, [tz]);
+    if (mode === "bs") {
+      setViewIso(() => {
+        const bsStr = adIsoToBsIso(n.toISODate()!);
+        const [y, m] = bsStr.split("-").map(Number);
+        return bsIsoToAdIso(`${y}-${pad(m)}-01`);
+      });
+    } else {
+      setViewIso(n.startOf("month").toISODate()!);
+    }
+  }, [tz, mode]);
 
   const [attended, setAttended] = React.useState<Set<string>>(new Set());
   const [loading, setLoading] = React.useState(true);
@@ -168,11 +197,19 @@ export function AttendanceCalendar({
   }, [workerIdProp]);
 
   const cells = React.useMemo(
-    () => buildMonthGrid(y, m0, attended, todayKey, tz),
-    [y, m0, attended, todayKey, tz]
+    () => buildMonthGrid(viewIso, mode, attended, todayKey, tz),
+    [viewIso, mode, attended, todayKey, tz]
   );
 
-  const label = monthLabelForMode(y, m0 + 1, mode);
+  const label = React.useMemo(() => {
+    if (mode === "ad") {
+      return DateTime.fromISO(viewIso, { zone: tz }).toFormat("LLLL yyyy");
+    }
+    const bsStr = adIsoToBsIso(viewIso);
+    const [y, m] = bsStr.split("-").map(Number);
+    const monthIndex = Math.max(0, Math.min(11, (m ?? 1) - 1));
+    return `${BS_MONTHS[monthIndex] ?? "Unknown"} ${y} BS`;
+  }, [viewIso, mode, tz]);
 
   const zoneShort = workTimeZoneUiLabel(tz);
 
@@ -193,10 +230,19 @@ export function AttendanceCalendar({
               className="rounded-lg border border-zinc-200/90 p-2 hover:bg-zinc-100 dark:border-white/10 dark:hover:bg-white/5"
               aria-label="Previous month"
               onClick={() => {
-                if (m0 === 0) {
-                  setM0(11);
-                  setY((yy) => yy - 1);
-                } else setM0((mm) => mm - 1);
+                if (mode === "ad") {
+                  setViewIso((prev) =>
+                    DateTime.fromISO(prev).minus({ months: 1 }).startOf("month").toISODate()!
+                  );
+                } else {
+                  setViewIso((prev) => {
+                    const bsStr = adIsoToBsIso(prev);
+                    const [y, m] = bsStr.split("-").map(Number);
+                    const prevM = m === 1 ? 12 : m - 1;
+                    const prevY = m === 1 ? y - 1 : y;
+                    return bsIsoToAdIso(`${prevY}-${pad(prevM)}-01`);
+                  });
+                }
               }}
             >
               <ChevronLeft className="size-4" />
@@ -209,10 +255,19 @@ export function AttendanceCalendar({
               className="rounded-lg border border-zinc-200/90 p-2 hover:bg-zinc-100 dark:border-white/10 dark:hover:bg-white/5"
               aria-label="Next month"
               onClick={() => {
-                if (m0 === 11) {
-                  setM0(0);
-                  setY((yy) => yy + 1);
-                } else setM0((mm) => mm + 1);
+                if (mode === "ad") {
+                  setViewIso((prev) =>
+                    DateTime.fromISO(prev).plus({ months: 1 }).startOf("month").toISODate()!
+                  );
+                } else {
+                  setViewIso((prev) => {
+                    const bsStr = adIsoToBsIso(prev);
+                    const [y, m] = bsStr.split("-").map(Number);
+                    const nextM = m === 12 ? 1 : m + 1;
+                    const nextY = m === 12 ? y + 1 : y;
+                    return bsIsoToAdIso(`${nextY}-${pad(nextM)}-01`);
+                  });
+                }
               }}
             >
               <ChevronRight className="size-4" />

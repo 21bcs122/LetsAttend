@@ -17,6 +17,8 @@ import { ConfirmActionModal, ResultModal } from "@/components/client/feedback-mo
 import { toast } from "sonner";
 import { DEFAULT_ATTENDANCE_TIME_ZONE } from "@/lib/date/time-zone";
 import { formatInstantDateTime12hInZone } from "@/lib/time/format-wall-time";
+import { useCalendarMode } from "@/components/client/calendar-mode-context";
+import { formatIsoForCalendar } from "@/lib/date/bs-calendar";
 
 type OvertimeStamp = {
   time?: { seconds?: number };
@@ -60,6 +62,7 @@ function fmtGps(g: OvertimeStamp["gps"]) {
 }
 
 export default function AdminOvertimePage() {
+  const { mode } = useCalendarMode();
   const [items, setItems] = React.useState<Row[]>([]);
   const [sites, setSites] = React.useState<SiteOpt[]>([]);
   const [loading, setLoading] = React.useState(true);
@@ -397,7 +400,7 @@ export default function AdminOvertimePage() {
                       <dl className="mt-3 grid gap-1 text-xs text-zinc-600 dark:text-zinc-400">
                         <div>
                           <span className="text-zinc-500">Work date: </span>
-                          {r.date ?? "—"}
+                          {r.date ? formatIsoForCalendar(r.date, mode) : "—"}
                         </div>
                         <div>
                           <span className="text-zinc-500">Site: </span>

@@ -22,6 +22,8 @@ import { UtcTimePicker } from "@/components/client/utc-time-picker";
 import { getGpsFix } from "@/lib/client/geolocation";
 import { formatWallHm12h } from "@/lib/time/format-wall-time";
 import { cn } from "@/lib/utils";
+import { useCalendarMode } from "@/components/client/calendar-mode-context";
+import { formatIsoForCalendar } from "@/lib/date/bs-calendar";
 
 type Assignee = { id: string; name: string; email: string; role: string };
 
@@ -52,6 +54,7 @@ function fmtGps(g: OffsiteRow["requestGps"]) {
 }
 
 export function EmployeeOffsiteRequestPanel() {
+  const { mode } = useCalendarMode();
   const [assignees, setAssignees] = React.useState<Assignee[]>([]);
   const [assigneeUid, setAssigneeUid] = React.useState("");
   const [date, setDate] = React.useState(() =>
@@ -238,7 +241,10 @@ export function EmployeeOffsiteRequestPanel() {
                     </span>
                   </div>
                   <p className="mt-2 text-xs text-zinc-600 dark:text-zinc-500">
-                    Date <span className="text-zinc-900 dark:text-zinc-300">{r.date ?? "—"}</span>
+                    Date{" "}
+                    <span className="text-zinc-900 dark:text-zinc-300">
+                      {r.date ? formatIsoForCalendar(r.date, mode) : "—"}
+                    </span>
                   </p>
                   <p className="mt-1 text-xs text-zinc-700 dark:text-zinc-300">
                     Assignee:{" "}

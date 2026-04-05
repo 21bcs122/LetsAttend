@@ -4,34 +4,12 @@ import * as React from "react";
 import { DateTime } from "luxon";
 import { CalendarClock, ChevronDown, ChevronLeft, ChevronRight } from "lucide-react";
 import { useCalendarMode } from "@/components/client/calendar-mode-context";
-import { adIsoToBsIso, bsIsoToAdIso, monthLabelForMode } from "@/lib/date/bs-calendar";
+import { currentMonthYyyyMmForMode, monthLabelForModeYm } from "@/lib/date/bs-calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
 const MONTH_IX = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12] as const;
-
-function bsYearMonthFromAd(adYear: number, adMonthOneBased: number): { bsYear: number; bsMonth: number } | null {
-  const adIso = `${String(adYear).padStart(4, "0")}-${String(adMonthOneBased).padStart(2, "0")}-01`;
-  const bs = adIsoToBsIso(adIso);
-  const [y, m] = bs.split("-").map(Number);
-  if (!Number.isFinite(y) || !Number.isFinite(m)) return null;
-  return { bsYear: y, bsMonth: m };
-}
-
-function adMonthFromBsYearMonth(bsYear: number, bsMonth: number, zone: string): string {
-  const bsIso = `${String(bsYear).padStart(4, "0")}-${String(bsMonth).padStart(2, "0")}-01`;
-  const adIso = bsIsoToAdIso(bsIso);
-  const ad = DateTime.fromISO(adIso, { zone });
-  return ad.isValid ? ad.toFormat("yyyy-MM") : DateTime.now().setZone(zone).toFormat("yyyy-MM");
-}
-
-function bsMonthNameFromBsYearMonth(bsYear: number, bsMonth: number, zone: string): string {
-  const adYm = adMonthFromBsYearMonth(bsYear, bsMonth, zone);
-  const ad = DateTime.fromFormat(adYm, "yyyy-MM", { zone });
-  if (!ad.isValid) return `M${bsMonth}`;
-  return monthLabelForMode(ad.year, ad.month, "bs").replace(/\s+\d{4}\s+BS$/, "");
-}
 
 export function WorkingHoursMonthPickerCard({
   value,
@@ -48,29 +26,35 @@ export function WorkingHoursMonthPickerCard({
 }) {
   const [open, setOpen] = React.useState(false);
   const { mode } = useCalendarMode();
-  const selected = DateTime.fromFormat(value, "yyyy-MM", { zone });
-  const displayLong = selected.isValid
-    ? monthLabelForMode(selected.year, selected.month, mode)
-    : value;
-  const selYear = selected.isValid ? selected.year : DateTime.now().setZone(zone).year;
-  const selMonth = selected.isValid ? selected.month : DateTime.now().setZone(zone).month;
+  
+  const parsedYm = React.useMemo(() => {
+    const m = /^(\d{4})-(\d{2})$/.exec(value.trim());
+    if (!m) return null;
+    return { year: Number(m[1]), month: Number(m[2]) };
+  }, [value]);
 
-  const selectedBs = React.useMemo(() => bsYearMonthFromAd(selYear, selMonth), [selMonth, selYear]);
-  const [draftYear, setDraftYear] = React.useState(mode === "bs" ? (selectedBs?.bsYear ?? selYear) : selYear);
+  const displayLong = React.useMemo(() => {
+    if (!parsedYm) return value;
+    return monthLabelForModeYm(parsedYm.year, parsedYm.month, mode);
+  }, [parsedYm, mode, value]);
+
+  const fallbackYm = React.useMemo(() => {
+    const current = currentMonthYyyyMmForMode(mode, zone);
+    const m = current.split("-").map(Number);
+    return { year: m[0] || DateTime.now().year, month: m[1] || DateTime.now().month };
+  }, [mode, zone]);
+
+  const selYear = parsedYm?.year ?? fallbackYm.year;
+  const selMonth = parsedYm?.month ?? fallbackYm.month;
+
+  const [draftYear, setDraftYear] = React.useState(selYear);
   React.useEffect(() => {
     if (!open) return;
-    setDraftYear(mode === "bs" ? (selectedBs?.bsYear ?? selYear) : selYear);
-  }, [mode, open, selectedBs?.bsYear, selYear]);
+    setDraftYear(selYear);
+  }, [open, selYear]);
 
   const pickMonth = (m: number) => {
-    if (mode === "bs") {
-      onChange(adMonthFromBsYearMonth(draftYear, m, zone));
-      setOpen(false);
-      return;
-    }
-    const next = DateTime.fromObject({ year: draftYear, month: m, day: 1 }, { zone });
-    if (!next.isValid) return;
-    onChange(next.toFormat("yyyy-MM"));
+    onChange(`${String(draftYear).padStart(4, "0")}-${String(m).padStart(2, "0")}`);
     setOpen(false);
   };
 
@@ -155,17 +139,8 @@ export function WorkingHoursMonthPickerCard({
         </div>
         <div className="grid grid-cols-3 gap-1.5 p-3 sm:grid-cols-4">
           {MONTH_IX.map((m) => {
-            const label =
-              mode === "bs"
-                ? bsMonthNameFromBsYearMonth(draftYear, m, zone)
-                : DateTime.fromObject(
-                    { year: draftYear, month: m, day: 1 },
-                    { zone }
-                  ).toFormat("LLL");
-            const isSel =
-              mode === "bs"
-                ? selectedBs?.bsYear === draftYear && selectedBs?.bsMonth === m
-                : draftYear === selYear && m === selMonth;
+            const label = monthLabelForModeYm(draftYear, m, mode).replace(new RegExp(`\\s+${draftYear}(?:\\s+BS)?$`), "");
+            const isSel = draftYear === selYear && m === selMonth;
             return (
               <button
                 key={m}

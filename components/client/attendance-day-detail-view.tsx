@@ -14,11 +14,15 @@ import { cn } from "@/lib/utils";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useDashboardUser } from "@/components/client/dashboard-user-context";
 import { normalizeTimeZoneId, workTimeZoneUiLabel } from "@/lib/date/time-zone";
+import type { CalendarMode } from "@/lib/date/bs-calendar";
+import { formatIsoForCalendar } from "@/lib/date/bs-calendar";
+import { useCalendarMode } from "@/components/client/calendar-mode-context";
 import type {
   OvertimeDayDetailRow,
   OffsiteDayDetailRow,
 } from "@/lib/attendance/worker-day-detail";
-import { formatInstantDateTime12hInZone, formatWallHm12h } from "@/lib/time/format-wall-time";
+import { formatInstantTime12hInZone, formatWallHm12h } from "@/lib/time/format-wall-time";
+import { DateTime } from "luxon";
 
 function zoneShortLabel(tz: string): string {
   return tz === "Asia/Kathmandu" ? "NPT" : tz;
@@ -100,12 +104,16 @@ export type DayDetailPayload =
       offsite: OffsiteDayDetailRow[];
     };
 
-function fmtLocal(ms: number | null | undefined, displayTimeZone: string) {
+function fmtLocal(ms: number | null | undefined, displayTimeZone: string, mode: CalendarMode) {
   if (ms == null || !Number.isFinite(ms)) return "—";
-  return formatInstantDateTime12hInZone(ms, displayTimeZone, {
+  const dt = DateTime.fromMillis(ms, { zone: displayTimeZone });
+  if (!dt.isValid) return "—";
+  const dateStr = formatIsoForCalendar(dt.toISODate()!, mode, displayTimeZone);
+  const timeStr = formatInstantTime12hInZone(ms, displayTimeZone, {
     withSeconds: true,
     withTimeZoneName: true,
   });
+  return `${dateStr}, ${timeStr}`;
 }
 
 function fmtDuration(ms: number | null | undefined) {
@@ -277,9 +285,11 @@ function DayHoursSummary({
 function OvertimeSection({
   rows,
   displayTimeZone,
+  mode,
 }: {
   rows: OvertimeDayDetailRow[];
   displayTimeZone: string;
+  mode: CalendarMode;
 }) {
   if (rows.length === 0) return null;
   const z = workTimeZoneUiLabel(displayTimeZone);
@@ -330,7 +340,7 @@ function OvertimeSection({
                     OT check-in
                   </p>
                   <p className="font-mono text-xs text-zinc-500">
-                    {fmtLocal(r.overtimeCheckIn?.atMs, displayTimeZone)}
+                    {fmtLocal(r.overtimeCheckIn?.atMs, displayTimeZone, mode)}
                   </p>
                   {typeof r.overtimeCheckIn?.photoUrl === "string" ? (
                     // eslint-disable-next-line @next/next/no-img-element
@@ -346,7 +356,7 @@ function OvertimeSection({
                     OT check-out
                   </p>
                   <p className="font-mono text-xs text-zinc-500">
-                    {fmtLocal(r.overtimeCheckOut?.atMs, displayTimeZone)}
+                    {fmtLocal(r.overtimeCheckOut?.atMs, displayTimeZone, mode)}
                   </p>
                   {typeof r.overtimeCheckOut?.photoUrl === "string" ? (
                     // eslint-disable-next-line @next/next/no-img-element
@@ -384,6 +394,7 @@ export function AttendanceDayDetailView({
   showWorkerHeader = true,
 }: Props) {
   const { user } = useDashboardUser();
+  const { mode } = useCalendarMode();
   const displayTz = normalizeTimeZoneId(user?.timeZone);
   const zoneLabel = workTimeZoneUiLabel(displayTz);
 
@@ -408,7 +419,9 @@ export function AttendanceDayDetailView({
           <div>
             <h1 className="text-2xl font-semibold tracking-tight">Day timeline</h1>
             <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
-              <span className="font-mono text-zinc-800 dark:text-zinc-300">{data.day}</span>
+              <span className="font-mono text-zinc-800 dark:text-zinc-300">
+                {formatIsoForCalendar(data.day, mode, displayTz)}
+              </span>
               {data.workerName ? (
                 <>
                   {" "}
@@ -425,7 +438,9 @@ export function AttendanceDayDetailView({
             <h1 className="text-2xl font-semibold tracking-tight">Day detail</h1>
             <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
               Calendar day ({zoneLabel}):{" "}
-              <span className="font-mono text-zinc-800 dark:text-zinc-300">{data.day}</span>
+              <span className="font-mono text-zinc-800 dark:text-zinc-300">
+                {formatIsoForCalendar(data.day, mode, displayTz)}
+              </span>
             </p>
           </div>
         )}
@@ -444,7 +459,7 @@ export function AttendanceDayDetailView({
               </CardDescription>
             </CardHeader>
           </Card>
-          <OvertimeSection rows={data.overtime} displayTimeZone={displayTz} />
+          <OvertimeSection rows={data.overtime} displayTimeZone={displayTz} mode={mode} />
           <OffsiteSection rows={data.offsite} displayTimeZone={displayTz} />
           <DayHoursSummary data={data} displayTimeZone={displayTz} />
         </>
@@ -525,8 +540,8 @@ export function AttendanceDayDetailView({
                       <div>
                         <p className="font-medium text-zinc-900 dark:text-zinc-100">{seg.siteName}</p>
                         <p className="text-xs text-zinc-500">
-                          {fmtLocal(seg.startMs, displayTz)}
-                          {seg.endMs != null ? ` → ${fmtLocal(seg.endMs, displayTz)}` : " → …"}
+                          {fmtLocal(seg.startMs, displayTz, mode)}
+                          {seg.endMs != null ? ` → ${fmtLocal(seg.endMs, displayTz, mode)}` : " → …"}
                         </p>
                       </div>
                       <p className="font-mono text-cyan-800 dark:text-cyan-300/90">
@@ -559,7 +574,7 @@ export function AttendanceDayDetailView({
                     <ul className="space-y-1">
                       {data.analytics.tracking.offlineWindows.map((w, i) => (
                         <li key={`off-${i}`} className="font-mono text-xs text-zinc-400">
-                          {fmtLocal(w.startMs, displayTz)} → {fmtLocal(w.endMs, displayTz)} ({fmtDuration(w.durationMs)})
+                          {fmtLocal(w.startMs, displayTz, mode)} → {fmtLocal(w.endMs, displayTz, mode)} ({fmtDuration(w.durationMs)})
                         </li>
                       ))}
                     </ul>
@@ -569,7 +584,7 @@ export function AttendanceDayDetailView({
             </Card>
           ) : null}
 
-          <OvertimeSection rows={data.overtime} displayTimeZone={displayTz} />
+          <OvertimeSection rows={data.overtime} displayTimeZone={displayTz} mode={mode} />
           <OffsiteSection rows={data.offsite} displayTimeZone={displayTz} />
 
           <Card className="border-violet-500/20 bg-violet-500/[0.03]">
@@ -600,7 +615,7 @@ export function AttendanceDayDetailView({
                         <p className="text-sm text-zinc-900 dark:text-zinc-200">
                           <strong>{String((ev as { siteName?: string }).siteName ?? "?")}</strong>
                         </p>
-                        <p className="font-mono text-xs text-zinc-500">{fmtLocal(ev.atMs, displayTz)}</p>
+                        <p className="font-mono text-xs text-zinc-500">{fmtLocal(ev.atMs, displayTz, mode)}</p>
                         {typeof (ev as { photoUrl?: string }).photoUrl === "string" ? (
                           // eslint-disable-next-line @next/next/no-img-element
                           <img
@@ -624,7 +639,7 @@ export function AttendanceDayDetailView({
                             {(ev as { toSiteName?: string }).toSiteName}
                           </span>
                         </p>
-                        <p className="font-mono text-xs text-zinc-500">{fmtLocal(ev.atMs, displayTz)}</p>
+                        <p className="font-mono text-xs text-zinc-500">{fmtLocal(ev.atMs, displayTz, mode)}</p>
                         {(ev as { previousSiteCheckOut?: { siteName?: string } | null })
                           .previousSiteCheckOut ? (
                           <p className="text-xs text-amber-900 dark:text-amber-200/80">
@@ -656,8 +671,8 @@ export function AttendanceDayDetailView({
                           Offline / No ping
                         </p>
                         <p className="text-xs text-zinc-500">
-                          {fmtLocal(ev.atMs, displayTz)}{" → "}
-                          {fmtLocal((ev as unknown as { endMs: number }).endMs, displayTz)}
+                          {fmtLocal(ev.atMs, displayTz, mode)}{" → "}
+                          {fmtLocal((ev as unknown as { endMs: number }).endMs, displayTz, mode)}
                         </p>
                         <p className="text-xs text-orange-800 dark:text-orange-300/90">
                           Gap: {fmtDuration((ev as unknown as { durationMs: number }).durationMs)}
@@ -672,8 +687,8 @@ export function AttendanceDayDetailView({
                           Out of site
                         </p>
                         <p className="text-xs text-zinc-500">
-                          {fmtLocal(ev.atMs, displayTz)}{" → "}
-                          {fmtLocal((ev as unknown as { endMs: number }).endMs, displayTz)}
+                          {fmtLocal(ev.atMs, displayTz, mode)}{" → "}
+                          {fmtLocal((ev as unknown as { endMs: number }).endMs, displayTz, mode)}
                         </p>
                         <p className="text-xs text-red-800 dark:text-red-300/90">
                           {fmtDuration((ev as unknown as { durationMs: number }).durationMs)} outside{" "}
@@ -692,7 +707,7 @@ export function AttendanceDayDetailView({
                           <strong>{String((ev as { siteName?: string }).siteName ?? "?")}</strong> — end
                           of day
                         </p>
-                        <p className="font-mono text-xs text-zinc-500">{fmtLocal(ev.atMs, displayTz)}</p>
+                        <p className="font-mono text-xs text-zinc-500">{fmtLocal(ev.atMs, displayTz, mode)}</p>
                         {typeof (ev as { photoUrl?: string }).photoUrl === "string" &&
                         !(ev as { auto?: boolean }).auto ? (
                           // eslint-disable-next-line @next/next/no-img-element
@@ -720,7 +735,7 @@ export function AttendanceDayDetailView({
                 <dd className={cn("font-medium text-zinc-900 dark:text-zinc-100")}>
                   {data.checkIn?.siteName ?? "—"}
                 </dd>
-                <dd className="font-mono text-xs text-zinc-500">{fmtLocal(data.checkIn?.atMs, displayTz)}</dd>
+                <dd className="font-mono text-xs text-zinc-500">{fmtLocal(data.checkIn?.atMs, displayTz, mode)}</dd>
               </div>
               <div>
                 <dt className="text-zinc-500">Final check-out</dt>
@@ -732,7 +747,7 @@ export function AttendanceDayDetailView({
                         <span className="ml-2 text-xs text-amber-400">auto</span>
                       ) : null}
                     </dd>
-                    <dd className="font-mono text-xs text-zinc-500">{fmtLocal(data.checkOut.atMs, displayTz)}</dd>
+                    <dd className="font-mono text-xs text-zinc-500">{fmtLocal(data.checkOut.atMs, displayTz, mode)}</dd>
                   </>
                 ) : (() => {
                   // Check if a synthetic auto-checkout was injected into the timeline.
@@ -745,7 +760,7 @@ export function AttendanceDayDetailView({
                         Auto check-out
                         <span className="ml-2 text-xs text-amber-500/80">(pending)</span>
                       </dd>
-                      <dd className="font-mono text-xs text-zinc-500">{fmtLocal(synth.atMs, displayTz)}</dd>
+                      <dd className="font-mono text-xs text-zinc-500">{fmtLocal(synth.atMs, displayTz, mode)}</dd>
                     </>
                   ) : (
                     <>

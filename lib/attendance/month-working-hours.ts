@@ -3,6 +3,7 @@ import { DateTime } from "luxon";
 import { DEFAULT_ATTENDANCE_TIME_ZONE } from "@/lib/date/time-zone";
 import { MONTHLY_REGULAR_CAP_HOURS } from "@/lib/attendance/month-hours-cap";
 import { buildWorkerDayDetail, type WorkerDayDetailResult } from "./worker-day-detail";
+import { type CalendarMode, bsMonthDays, bsIsoToAdIso } from "@/lib/date/bs-calendar";
 
 export { MONTHLY_REGULAR_CAP_HOURS };
 
@@ -171,7 +172,8 @@ function buildDayEntryRows(day: string, zone: string, data: WorkerDayDetailResul
 export async function buildWorkerMonthWorkingHours(
   db: Firestore,
   workerId: string,
-  monthYyyyMm: string
+  monthYyyyMm: string,
+  mode: CalendarMode = "ad"
 ): Promise<WorkerMonthWorkingHours> {
   const m = /^(\d{4})-(\d{2})$/.exec(monthYyyyMm.trim());
   if (!m) throw new Error("month must be YYYY-MM");
@@ -180,8 +182,24 @@ export async function buildWorkerMonthWorkingHours(
   if (monthNum < 1 || monthNum > 12) throw new Error("Invalid month");
 
   const z = DEFAULT_ATTENDANCE_TIME_ZONE;
-  const start = DateTime.fromObject({ year, month: monthNum, day: 1 }, { zone: z });
-  const dim = start.daysInMonth ?? 30;
+  const dayKeys: string[] = [];
+
+  if (mode === "bs") {
+    const dim = bsMonthDays(year, monthNum);
+    const pad2 = (n: number) => String(n).padStart(2, "0");
+    for (let i = 1; i <= dim; i++) {
+      const bsIso = `${year}-${pad2(monthNum)}-${pad2(i)}`;
+      dayKeys.push(bsIsoToAdIso(bsIso));
+    }
+  } else {
+    const start = DateTime.fromObject({ year, month: monthNum, day: 1 }, { zone: z });
+    const dim = start.daysInMonth ?? 30;
+    for (let i = 1; i <= dim; i++) {
+      dayKeys.push(
+        DateTime.fromObject({ year, month: monthNum, day: i }, { zone: z }).toFormat("yyyy-MM-dd")
+      );
+    }
+  }
 
   const days: DayCreditedMs[] = [];
   const entries: DayEntryRow[] = [];
@@ -192,9 +210,6 @@ export async function buildWorkerMonthWorkingHours(
     totalMs: 0,
   };
 
-  const dayKeys = Array.from({ length: dim }, (_, i) =>
-    DateTime.fromObject({ year, month: monthNum, day: i + 1 }, { zone: z }).toFormat("yyyy-MM-dd")
-  );
   const dayDetails = await Promise.all(dayKeys.map((dayKey) => buildWorkerDayDetail(db, workerId, dayKey)));
 
   for (let i = 0; i < dayKeys.length; i++) {

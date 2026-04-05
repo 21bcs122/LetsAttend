@@ -5,6 +5,9 @@ import { Clock } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { getBrowserTimeZone, workTimeZoneUiLabel } from "@/lib/date/time-zone";
 import { WALL_TIME_DISPLAY_LOCALE } from "@/lib/time/format-wall-time";
+import { DateTime } from "luxon";
+import { useCalendarMode } from "@/components/client/calendar-mode-context";
+import { formatIsoForCalendar } from "@/lib/date/bs-calendar";
 
 /**
  * Live clock for the device’s time zone: full date + hours, minutes, seconds (12-hour AM/PM).
@@ -13,6 +16,7 @@ export function LocalTimezoneClock({ className }: { className?: string }) {
   const [mounted, setMounted] = React.useState(false);
   const tz = React.useMemo(() => (mounted ? getBrowserTimeZone() : "UTC"), [mounted]);
   const [nowMs, setNowMs] = React.useState(() => Date.now());
+  const { mode } = useCalendarMode();
 
   React.useEffect(() => {
     setMounted(true);
@@ -39,13 +43,21 @@ export function LocalTimezoneClock({ className }: { className?: string }) {
     );
   }
 
-  const dateStr = new Date(nowMs).toLocaleDateString(WALL_TIME_DISPLAY_LOCALE, {
-    timeZone: tz,
-    weekday: "long",
-    year: "numeric",
-    month: "long",
-    day: "numeric",
-  });
+  let dateStr = "";
+  if (mode === "bs") {
+    const iso = DateTime.fromMillis(nowMs).setZone(tz).toISODate();
+    if (iso) dateStr = formatIsoForCalendar(iso, "bs", tz);
+  }
+  
+  if (!dateStr) {
+    dateStr = new Date(nowMs).toLocaleDateString(WALL_TIME_DISPLAY_LOCALE, {
+      timeZone: tz,
+      weekday: "long",
+      year: "numeric",
+      month: "long",
+      day: "numeric",
+    });
+  }
 
   const timeStr = new Date(nowMs).toLocaleTimeString(WALL_TIME_DISPLAY_LOCALE, {
     timeZone: tz,

@@ -22,6 +22,7 @@ import {
   UserPlus,
   Users,
   X,
+  FileDown,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -38,7 +39,7 @@ type Props = {
 export function DashboardSidebar({ mobileOpen, onCloseMobile }: Props) {
   const pathname = usePathname();
   const { user } = useDashboardUser();
-  const [employeeSectionOpen, setEmployeeSectionOpen] = React.useState(true);
+  const [employeeSectionOpen, setEmployeeSectionOpen] = React.useState(false);
   const [adminSectionOpen, setAdminSectionOpen] = React.useState(true);
 
   /** Keep the section that owns the current route expanded so the active link stays visible. */
@@ -85,6 +86,11 @@ export function DashboardSidebar({ mobileOpen, onCloseMobile }: Props) {
         label: "Working hours",
         icon: CalendarClock,
       },
+      {
+        href: `${adminBase}/reports`,
+        label: "Reports",
+        icon: FileDown,
+      },
     ];
     if (user?.role === "super_admin") {
       links.push({ href: `${adminBase}/team`, label: "Team", icon: UserPlus });
@@ -130,7 +136,7 @@ export function DashboardSidebar({ mobileOpen, onCloseMobile }: Props) {
         )}
       >
         <div className="mb-6 flex items-start justify-between gap-2 px-2 md:mb-8">
-          <MtesBrandLockup variant="sidebar" className="min-w-0 pr-1" />
+          <MtesBrandLockup variant="sidebar" className="min-w-0 pr-1" showLogo />
           <button
             type="button"
             className="rounded-lg p-2 text-zinc-500 hover:bg-zinc-200/80 dark:text-zinc-400 dark:hover:bg-white/10 md:hidden"

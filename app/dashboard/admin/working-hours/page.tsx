@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import Link from "next/link";
 import JSZip from "jszip";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
@@ -19,7 +20,7 @@ import { getFirebaseAuth } from "@/lib/firebase/client";
 import { WorkingHoursMonthPanel } from "@/components/client/working-hours-month-panel";
 import { Button } from "@/components/ui/button";
 import { useCalendarMode } from "@/components/client/calendar-mode-context";
-import { monthLabelForMode, formatIsoForCalendar } from "@/lib/date/bs-calendar";
+import { monthLabelForModeYm, formatIsoForCalendar, currentMonthYyyyMmForMode, convertMonthMode, adIsoToBsIso } from "@/lib/date/bs-calendar";
 import { toast } from "sonner";
 
 type UserRow = {
@@ -62,11 +63,12 @@ export default function AdminWorkingHoursPage() {
   const [workerId, setWorkerId] = React.useState("");
   const [periodOpen, setPeriodOpen] = React.useState(false);
   const [periodMode, setPeriodMode] = React.useState<"year" | "range">("year");
-  const [periodYear, setPeriodYear] = React.useState(() => DateTime.now().year);
-  const [periodStartMonth, setPeriodStartMonth] = React.useState(() =>
-    DateTime.now().toFormat("yyyy-MM")
-  );
-  const [periodEndMonth, setPeriodEndMonth] = React.useState(() => DateTime.now().toFormat("yyyy-MM"));
+  const [periodYear, setPeriodYear] = React.useState(() => {
+    const current = currentMonthYyyyMmForMode("ad", "Asia/Kathmandu");
+    return Number(current.split("-")[0]) || DateTime.now().year;
+  });
+  const [periodStartMonth, setPeriodStartMonth] = React.useState(() => currentMonthYyyyMmForMode("ad", "Asia/Kathmandu"));
+  const [periodEndMonth, setPeriodEndMonth] = React.useState(() => currentMonthYyyyMmForMode("ad", "Asia/Kathmandu"));
   const [downloadingAll, setDownloadingAll] = React.useState(false);
   const [downloadStatus, setDownloadStatus] = React.useState("Waiting to start...");
   const [downloadCurrentEmployee, setDownloadCurrentEmployee] = React.useState("");
@@ -81,16 +83,37 @@ export default function AdminWorkingHoursPage() {
     setMounted(true);
   }, []);
 
+  const prevModeRef = React.useRef(mode);
+  React.useEffect(() => {
+    if (!mounted) {
+       setPeriodStartMonth(currentMonthYyyyMmForMode(mode, "Asia/Kathmandu"));
+       setPeriodEndMonth(currentMonthYyyyMmForMode(mode, "Asia/Kathmandu"));
+       prevModeRef.current = mode;
+       return;
+    }
+    if (prevModeRef.current !== mode) {
+      setPeriodStartMonth(prev => convertMonthMode(prev, prevModeRef.current, mode));
+      setPeriodEndMonth(prev => convertMonthMode(prev, prevModeRef.current, mode));
+      prevModeRef.current = mode;
+    }
+  }, [mode, mounted]);
+
   const monthOptions = React.useMemo(() => {
     const now = DateTime.now();
-    const startYear = 2020;
-    const endYear = now.year + 1;
+    let startYear = 2020;
+    let endYear = now.year + 1;
+    if (mode === "bs") {
+       const bsNow = adIsoToBsIso(now.toISODate()!).split("-").map(Number);
+       startYear = 2077;
+       endYear = bsNow[0]! + 1;
+    }
     const out: Array<{ value: string; label: string }> = [];
     for (let y = endYear; y >= startYear; y--) {
       for (let m = 12; m >= 1; m--) {
+        const value = `${String(y).padStart(4,"0")}-${String(m).padStart(2,"0")}`;
         out.push({
-          value: DateTime.fromObject({ year: y, month: m, day: 1 }).toFormat("yyyy-MM"),
-          label: monthLabelForMode(y, m, mode),
+          value,
+          label: monthLabelForModeYm(y, m, mode),
         });
       }
     }
@@ -140,7 +163,7 @@ export default function AdminWorkingHoursPage() {
   const buildMonthsFromPeriod = React.useCallback(() => {
     if (periodMode === "year") {
       return Array.from({ length: 12 }, (_, i) =>
-        DateTime.fromObject({ year: periodYear, month: i + 1, day: 1 }).toFormat("yyyy-MM")
+        `${String(periodYear).padStart(4, "0")}-${String(i + 1).padStart(2, "0")}`
       );
     }
     const s = DateTime.fromFormat(periodStartMonth, "yyyy-MM");
@@ -203,8 +226,11 @@ export default function AdminWorkingHoursPage() {
       for (let i = 0; i < rows.length; i++) {
         const p = rows[i]!;
         if (i > 0) doc.addPage("a4");
-        const dt = DateTime.fromFormat(p.month, "yyyy-MM");
-        const monthLabel = dt.isValid ? monthLabelForMode(dt.year, dt.month, mode) : p.month;
+        const pMonthParts = p.month.split("-").map(Number);
+        const monthLabel =
+          pMonthParts.length === 2 && Number.isFinite(pMonthParts[0]) && Number.isFinite(pMonthParts[1])
+            ? monthLabelForModeYm(pMonthParts[0]!, pMonthParts[1]!, mode)
+            : p.month;
         const startY = drawHeader(monthLabel);
         autoTable(doc, {
           startY,
@@ -352,9 +378,11 @@ export default function AdminWorkingHoursPage() {
                 <CardTitle className="text-base">Worker</CardTitle>
                 <CardDescription>Select an employee to load their month.</CardDescription>
               </div>
-              <Button type="button" variant="secondary" disabled={loading || downloadingAll} onClick={() => setPeriodOpen(true)}>
-                {downloadingAll ? "Preparing ZIP..." : "Download all employees (PDF)"}
-              </Button>
+              <Link href="/dashboard/admin/reports">
+                <Button type="button" variant="secondary">
+                  Go to Advanced Reports
+                </Button>
+              </Link>
             </div>
           </CardHeader>
           <CardContent>
@@ -435,7 +463,7 @@ export default function AdminWorkingHoursPage() {
                           min={2000}
                           max={2100}
                           value={periodYear}
-                          onChange={(e) => setPeriodYear(Number(e.target.value || DateTime.now().year))}
+                          onChange={(e) => setPeriodYear(Number(e.target.value) || new Date().getFullYear())}
                           className="w-full rounded-xl border border-white/15 bg-zinc-900 px-3 py-2"
                         />
                       </label>

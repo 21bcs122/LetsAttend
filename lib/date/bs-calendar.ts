@@ -1,9 +1,10 @@
 import { DateTime } from "luxon";
 import { ADToBS, BSToAD } from "bikram-sambat-js";
 
+
 export type CalendarMode = "ad" | "bs";
 
-const BS_MONTHS = [
+export const BS_MONTHS = [
   "Baisakh",
   "Jestha",
   "Ashadh",
@@ -52,18 +53,41 @@ export function formatIsoForCalendar(
   return dt.isValid ? dt.toFormat("ccc, LLL d, yyyy") : adIso;
 }
 
-export function monthLabelForMode(
-  adYear: number,
-  adMonthOneBased: number,
+export function monthLabelForModeYm(
+  year: number,
+  month: number,
   mode: CalendarMode
 ): string {
   if (mode === "ad") {
-    return DateTime.fromObject({ year: adYear, month: adMonthOneBased, day: 1 }).toFormat("LLLL yyyy");
+    return DateTime.fromObject({ year, month, day: 1 }).toFormat("LLLL yyyy");
   }
-  const adIso = `${String(adYear).padStart(4, "0")}-${String(adMonthOneBased).padStart(2, "0")}-01`;
-  const bs = adIsoToBsIso(adIso);
-  const [y, m] = bs.split("-").map(Number);
-  return `${BS_MONTHS[(m ?? 1) - 1] ?? "Unknown"} ${y} BS`;
+  return `${BS_MONTHS[(month ?? 1) - 1] ?? "Unknown"} ${year} BS`;
+}
+
+export function currentMonthYyyyMmForMode(mode: CalendarMode, zone: string): string {
+  const dt = DateTime.now().setZone(zone);
+  if (mode === "ad") return dt.toFormat("yyyy-MM");
+  const bsParts = adIsoToBsIso(dt.toISODate() || "2000-01-01").split("-").map(Number);
+  return `${String(bsParts[0]).padStart(4, "0")}-${String(bsParts[1]).padStart(2, "0")}`;
+}
+
+export function convertMonthMode(
+  monthYyyyMm: string,
+  fromMode: CalendarMode,
+  toMode: CalendarMode
+): string {
+  if (fromMode === toMode) return monthYyyyMm;
+  if (!/^\d{4}-\d{2}$/.test(monthYyyyMm.trim())) return monthYyyyMm;
+  const [y, m] = monthYyyyMm.trim().split("-");
+  if (fromMode === "ad" && toMode === "bs") {
+    const bsIso = adIsoToBsIso(`${y}-${m}-15`);
+    return bsIso.substring(0, 7);
+  }
+  if (fromMode === "bs" && toMode === "ad") {
+    const adIso = bsIsoToAdIso(`${y}-${m}-15`);
+    return adIso.substring(0, 7);
+  }
+  return monthYyyyMm;
 }
 
 export function dayNumberForMode(adIso: string, mode: CalendarMode): string {
@@ -73,4 +97,21 @@ export function dayNumberForMode(adIso: string, mode: CalendarMode): string {
   const bs = adIsoToBsIso(adIso);
   const d = bs.split("-")[2];
   return d ? String(Number(d)) : "";
+}
+
+/**
+ * Returns the number of days in a given BS month.
+ * Computed by diffing the AD start of this BS month and the next.
+ */
+export function bsMonthDays(bsYear: number, bsMonth: number): number {
+  const isLast = bsMonth === 12;
+  const nextYear = isLast ? bsYear + 1 : bsYear;
+  const nextMonth = isLast ? 1 : bsMonth + 1;
+  const pad2 = (n: number) => String(n).padStart(2, "0");
+  const thisFirstAd = bsIsoToAdIso(`${bsYear}-${pad2(bsMonth)}-01`);
+  const nextFirstAd = bsIsoToAdIso(`${nextYear}-${pad2(nextMonth)}-01`);
+  const s = DateTime.fromISO(thisFirstAd);
+  const e = DateTime.fromISO(nextFirstAd);
+  if (!s.isValid || !e.isValid) return 30; // fallback
+  return Math.round(e.diff(s, "days").days);
 }

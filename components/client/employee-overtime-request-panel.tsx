@@ -22,6 +22,8 @@ import { calendarDateKeyInTimeZone } from "@/lib/date/calendar-day-key";
 import { normalizeTimeZoneId } from "@/lib/date/time-zone";
 import { formatInstantDateTime12hInZone } from "@/lib/time/format-wall-time";
 import { toast } from "sonner";
+import { useCalendarMode } from "@/components/client/calendar-mode-context";
+import { formatIsoForCalendar } from "@/lib/date/bs-calendar";
 
 type Site = { id: string; name?: string };
 
@@ -102,6 +104,7 @@ function AttendanceLine({
 
 export function EmployeeOvertimeRequestPanel() {
   const { user } = useDashboardUser();
+  const { mode } = useCalendarMode();
   const displayTz = normalizeTimeZoneId(user?.timeZone);
   const [sites, setSites] = React.useState<Site[]>([]);
   const [siteId, setSiteId] = React.useState("");
@@ -253,6 +256,9 @@ export function EmployeeOvertimeRequestPanel() {
                 const outTime = r.overtimeCheckOut?.time;
                 const hasIn = getFirestoreSeconds(inTime) != null;
                 const hasOut = getFirestoreSeconds(outTime) != null;
+                
+                const finalIsoDate = rowDate || r.date || "";
+                const displayDateStr = finalIsoDate ? formatIsoForCalendar(finalIsoDate, mode) : "—";
 
                 return (
                   <li
@@ -262,7 +268,7 @@ export function EmployeeOvertimeRequestPanel() {
                     <div className="flex flex-wrap items-start justify-between gap-2">
                       <div>
                         <p className="font-medium text-zinc-900 dark:text-zinc-100">
-                          {rowDate || r.date || "—"}
+                          {displayDateStr}
                         </p>
                         <p className="text-xs text-zinc-500">Work date</p>
                         <p className="text-xs text-zinc-500">
@@ -310,7 +316,7 @@ export function EmployeeOvertimeRequestPanel() {
                             ) : (
                               <p className="text-xs text-amber-200/80">
                                 Open this page on work date{" "}
-                                <span className="font-mono">{rowDate || "—"}</span> to check in and check
+                                <span className="font-mono">{displayDateStr}</span> to check in and check
                                 out (same calendar day in your time zone).
                               </p>
                             )}
@@ -347,7 +353,7 @@ export function EmployeeOvertimeRequestPanel() {
                               </p>
                             ) : (
                               <p className="text-xs text-amber-200/80">
-                                Come back on work date <span className="font-mono">{rowDate}</span> to
+                                Come back on work date <span className="font-mono">{displayDateStr}</span> to
                                 check out (same calendar day as this overtime).
                               </p>
                             )}

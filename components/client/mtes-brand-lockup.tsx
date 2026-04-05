@@ -88,7 +88,7 @@ export function MtesBrandLockup({
       <div className={cn("flex min-w-0 items-center gap-2.5 md:gap-3", className)}>
         {showLogo ? (
           <MtesThemeMark
-            className="h-10 w-10 shrink-0 sm:h-11 sm:w-11 md:h-[3.35rem] md:w-[3.35rem]"
+            className="hidden md:block md:h-[3.35rem] md:w-[3.35rem] shrink-0"
             size={160}
           />
         ) : null}
@@ -123,10 +123,16 @@ export function MtesBrandLockup({
 }
 
 /** Home top bar: wordmark + vendor; PNG logo from `md` up only (hidden on mobile). */
-export function MtesBrandHeaderLink({ className }: { className?: string }) {
+export function MtesBrandHeaderLink({
+  className,
+  showLogo = true,
+}: {
+  className?: string;
+  showLogo?: boolean;
+}) {
   return (
     <Link href="/" className={cn("min-w-0 shrink hover:opacity-90", className)}>
-      <MtesBrandLockup variant="header" showLogo />
+      <MtesBrandLockup variant="header" showLogo={showLogo} />
     </Link>
   );
 }

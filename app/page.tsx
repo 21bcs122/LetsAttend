@@ -20,7 +20,7 @@ export default function HomePage() {
         <main className="relative z-10 flex flex-1 flex-col items-center justify-center px-3 pb-20 pt-2 text-center md:px-6 md:pb-24 md:pt-6">
           <div className="mb-8 flex w-full max-w-lg flex-col items-center md:mb-10">
             <MtesThemeMark
-              className="h-[4.5rem] w-[4.5rem] md:h-28 md:w-28"
+              className="hidden md:block md:h-28 md:w-28 object-contain"
               size={256}
               priority
             />
